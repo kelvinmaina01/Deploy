@@ -2,3 +2,4 @@ langgraph
 pandas
 langchain-openai
 python-dotenv
+datasets
