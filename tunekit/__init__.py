@@ -18,6 +18,7 @@ from .tools import (
     analyze_dataset,
     get_model_recommendation,
     get_training_config,
+    generate_package,
 )
 from .agents import planning_agent
 
@@ -34,6 +35,7 @@ __all__ = [
     "analyze_dataset",
     "get_model_recommendation",
     "get_training_config",
+    "generate_package",
     # Agents
     "planning_agent",
 ]
