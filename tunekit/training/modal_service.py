@@ -4,7 +4,6 @@ Modal Service Wrapper
 High-level interface for managing training jobs on Modal.
 """
 
-import os
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -12,6 +11,9 @@ import modal
 
 # In-memory job tracking (use Redis/DB in production)
 _jobs: dict[str, dict] = {}
+
+# Modal app name (must match modal_train.py)
+MODAL_APP_NAME = "tunekit-training"
 
 
 def start_training(
@@ -37,27 +39,28 @@ def start_training(
     with open(data_path, "r") as f:
         data_content = f.read()
     
-    # Get the Modal app
-    from tunekit.training.modal_train import (
-        app,
-        train_classification,
-        train_ner,
-        train_instruction,
-    )
+    # Map task type to function name
+    function_map = {
+        "classification": "train_classification",
+        "ner": "train_ner",
+        "instruction_tuning": "train_instruction",
+    }
     
-    # Select training function based on task type
-    if task_type == "classification":
-        train_fn = train_classification
-    elif task_type == "ner":
-        train_fn = train_ner
-    elif task_type == "instruction_tuning":
-        train_fn = train_instruction
-    else:
-        raise ValueError(f"Unknown task type: {task_type}")
+    if task_type not in function_map:
+        return {
+            "job_id": job_id,
+            "status": "failed",
+            "error": f"Unknown task type: {task_type}",
+        }
+    
+    function_name = function_map[task_type]
     
     # Spawn the training job asynchronously
     try:
-        # Use Modal's spawn to run async
+        # Look up the deployed function from Modal
+        train_fn = modal.Function.from_name(MODAL_APP_NAME, function_name)
+        
+        # Spawn async execution
         function_call = train_fn.spawn(config, data_content, job_id)
         
         # Store job info
@@ -80,6 +83,17 @@ def start_training(
             "job_id": job_id,
             "status": "running",
             "message": f"Training started for {task_type} task",
+        }
+        
+    except modal.exception.NotFoundError:
+        error_msg = (
+            f"Modal app '{MODAL_APP_NAME}' not found. "
+            "Please deploy first: modal deploy tunekit/training/modal_train.py"
+        )
+        return {
+            "job_id": job_id,
+            "status": "failed",
+            "error": error_msg,
         }
         
     except Exception as e:
@@ -124,6 +138,11 @@ def get_training_status(job_id: str) -> dict:
             "job_id": job_id,
             "status": job["status"],
             "metrics": job.get("metrics"),
+            "base_metrics": job.get("base_metrics"),
+            "finetuned_metrics": job.get("finetuned_metrics"),
+            "improvement": job.get("improvement"),
+            "base_model": job.get("base_model"),
+            "task_type": job.get("task_type"),
             "error": job.get("error"),
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
@@ -140,13 +159,18 @@ def get_training_status(job_id: str) -> dict:
         }
     
     try:
-        # Try to get the result (non-blocking check)
-        # Modal's FunctionCall has a .get() method
-        result = function_call.get(timeout=0)
+        # Try to get the result with a small timeout
+        # timeout=0.5 gives Modal a moment to return cached results
+        result = function_call.get(timeout=0.5)
         
         # If we got here, the job is complete
         job["status"] = result.get("status", "completed")
         job["metrics"] = result.get("metrics")
+        job["base_metrics"] = result.get("base_metrics")
+        job["finetuned_metrics"] = result.get("finetuned_metrics")
+        job["improvement"] = result.get("improvement")
+        job["base_model"] = result.get("base_model")
+        job["task_type"] = result.get("task_type", job.get("task_type"))
         job["error"] = result.get("error")
         job["completed_at"] = datetime.now().isoformat()
         
@@ -154,13 +178,18 @@ def get_training_status(job_id: str) -> dict:
             "job_id": job_id,
             "status": job["status"],
             "metrics": job.get("metrics"),
+            "base_metrics": job.get("base_metrics"),
+            "finetuned_metrics": job.get("finetuned_metrics"),
+            "improvement": job.get("improvement"),
+            "base_model": job.get("base_model"),
+            "task_type": job.get("task_type"),
             "error": job.get("error"),
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
         }
         
-    except modal.exception.FunctionTimeoutError:
-        # Job is still running
+    except (modal.exception.FunctionTimeoutError, TimeoutError):
+        # Job is still running (timeout means result not ready yet)
         return {
             "job_id": job_id,
             "status": "running",
@@ -168,8 +197,8 @@ def get_training_status(job_id: str) -> dict:
             "message": "Training in progress...",
         }
         
-    except Exception as e:
-        # Something went wrong
+    except modal.exception.ExecutionError as e:
+        # The function itself raised an error
         job["status"] = "failed"
         job["error"] = str(e)
         job["completed_at"] = datetime.now().isoformat()
@@ -180,6 +209,17 @@ def get_training_status(job_id: str) -> dict:
             "error": str(e),
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
+        }
+        
+    except Exception as e:
+        # Unknown error - log it but don't mark as failed yet
+        # It might just be a transient network issue
+        print(f"[TuneKit] Status check error for {job_id}: {type(e).__name__}: {e}")
+        return {
+            "job_id": job_id,
+            "status": "running",
+            "started_at": job.get("started_at"),
+            "message": f"Checking status... ({type(e).__name__})",
         }
 
 
@@ -211,9 +251,8 @@ def get_model_download_url(job_id: str) -> dict:
     
     # Get model files from Modal volume
     try:
-        from tunekit.training.modal_train import get_model_files
-        
-        result = get_model_files.remote(job_id)
+        get_model_files_fn = modal.Function.from_name(MODAL_APP_NAME, "get_model_files")
+        result = get_model_files_fn.remote(job_id)
         
         if not result.get("exists"):
             return {
@@ -228,6 +267,13 @@ def get_model_download_url(job_id: str) -> dict:
             "files": result.get("files", []),
             "download_endpoint": f"/download-model/{job_id}",
             "message": "Model ready for download",
+        }
+        
+    except modal.exception.NotFoundError:
+        return {
+            "job_id": job_id,
+            "status": "error",
+            "error": f"Modal app '{MODAL_APP_NAME}' not deployed",
         }
         
     except Exception as e:
@@ -250,9 +296,8 @@ def download_model_file_content(job_id: str, filename: str) -> Optional[bytes]:
         File content as bytes, or None if not found
     """
     try:
-        from tunekit.training.modal_train import download_model_file
-        
-        content = download_model_file.remote(job_id, filename)
+        download_fn = modal.Function.from_name(MODAL_APP_NAME, "download_model_file")
+        content = download_fn.remote(job_id, filename)
         return content
         
     except Exception as e:
@@ -278,3 +323,47 @@ def list_jobs() -> list[dict]:
         for job in _jobs.values()
     ]
 
+
+def compare_models(job_id: str, text: str) -> dict:
+    """
+    Compare base model vs fine-tuned model predictions.
+    
+    Args:
+        job_id: The job identifier for the fine-tuned model
+        text: Input text to run inference on
+    
+    Returns:
+        dict with base and finetuned predictions
+    """
+    if job_id not in _jobs:
+        return {
+            "error": "Job not found",
+            "job_id": job_id,
+        }
+    
+    job = _jobs[job_id]
+    
+    if job["status"] != "completed":
+        return {
+            "error": "Training not completed yet",
+            "job_id": job_id,
+        }
+    
+    task_type = job.get("task_type", "classification")
+    
+    try:
+        compare_fn = modal.Function.from_name(MODAL_APP_NAME, "compare_inference")
+        result = compare_fn.remote(job_id, text, task_type)
+        return result
+        
+    except modal.exception.NotFoundError:
+        return {
+            "error": f"Comparison function not deployed. Run: modal deploy tunekit/training/modal_train.py",
+            "job_id": job_id,
+        }
+        
+    except Exception as e:
+        return {
+            "error": f"Comparison failed: {str(e)}",
+            "job_id": job_id,
+        }

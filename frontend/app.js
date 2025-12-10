@@ -9,6 +9,8 @@ const API_URL = 'http://localhost:8000';
 // State
 let sessionId = null;
 let currentStep = 1;
+let jobId = null;
+let statusPollInterval = null;
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
@@ -20,10 +22,14 @@ const description = document.getElementById('description');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const planBtn = document.getElementById('planBtn');
 const generateBtn = document.getElementById('generateBtn');
+const trainCloudBtn = document.getElementById('trainCloudBtn');
 const downloadBtn = document.getElementById('downloadBtn');
+const downloadModelBtn = document.getElementById('downloadModelBtn');
 const startOver = document.getElementById('startOver');
 const backToUpload = document.getElementById('backToUpload');
 const backToAnalysis = document.getElementById('backToAnalysis');
+const backToPlan = document.getElementById('backToPlan');
+const continueToTrainBtn = document.getElementById('continueToTrainBtn');
 
 // ============================================================================
 // STEP NAVIGATION
@@ -270,7 +276,365 @@ planBtn.addEventListener('click', async () => {
 });
 
 // ============================================================================
-// GENERATE
+// CONTINUE TO TRAIN (Step 3 -> Step 4)
+// ============================================================================
+
+continueToTrainBtn.addEventListener('click', () => {
+    setStep(4);
+});
+
+// ============================================================================
+// TRAIN ON CLOUD (Modal)
+// ============================================================================
+
+trainCloudBtn.addEventListener('click', async () => {
+    try {
+        setButtonLoading(trainCloudBtn, true);
+        
+        const response = await fetch(`${API_URL}/train`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to start training');
+        }
+        
+        jobId = data.job_id;
+        
+        // Show training progress
+        showTrainingProgress(data);
+        setStep(5);
+        
+        // Start polling for status
+        startStatusPolling();
+        
+    } catch (error) {
+        alert('Training failed to start: ' + error.message);
+    } finally {
+        setButtonLoading(trainCloudBtn, false);
+    }
+});
+
+let pollCount = 0;
+let trainingStartTime = null;
+
+function showTrainingProgress(data) {
+    document.getElementById('trainingProgress').classList.remove('hidden');
+    document.getElementById('trainingComplete').classList.add('hidden');
+    document.getElementById('downloadPackage').classList.add('hidden');
+    
+    document.getElementById('jobIdDisplay').textContent = data.job_id;
+    document.getElementById('statusDisplay').textContent = 'Running';
+    document.getElementById('startTimeDisplay').textContent = new Date().toLocaleTimeString();
+    
+    // Clear previous logs
+    document.getElementById('logOutput').innerHTML = '';
+    pollCount = 0;
+    trainingStartTime = Date.now();
+    
+    addLogLine('🎯 Job ID: ' + data.job_id);
+    addLogLine('☁️ Spinning up GPU container on Modal...');
+    addLogLine('⏳ Training will begin shortly...');
+}
+
+function addLogLine(message, type = 'normal') {
+    const logOutput = document.getElementById('logOutput');
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    if (type === 'success') line.classList.add('log-success');
+    if (type === 'error') line.classList.add('log-error');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logOutput.appendChild(line);
+    logOutput.scrollTop = logOutput.scrollHeight;
+    
+    // Keep only last 20 log lines to prevent overflow
+    while (logOutput.children.length > 20) {
+        logOutput.removeChild(logOutput.firstChild);
+    }
+}
+
+function startStatusPolling() {
+    // Poll every 3 seconds for more responsive updates
+    statusPollInterval = setInterval(checkTrainingStatus, 3000);
+    
+    // Check immediately
+    setTimeout(checkTrainingStatus, 1000);
+}
+
+function stopStatusPolling() {
+    if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+        statusPollInterval = null;
+    }
+}
+
+async function checkTrainingStatus() {
+    if (!jobId) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/training-status/${jobId}`);
+        const data = await response.json();
+        
+        document.getElementById('statusDisplay').textContent = capitalizeFirst(data.status);
+        
+        if (data.status === 'completed') {
+            stopStatusPolling();
+            const elapsed = Math.round((Date.now() - trainingStartTime) / 1000);
+            addLogLine(`✅ Training completed in ${formatDuration(elapsed)}!`, 'success');
+            showTrainingComplete(data);
+        } else if (data.status === 'failed') {
+            stopStatusPolling();
+            addLogLine('❌ Training failed: ' + (data.error || 'Unknown error'), 'error');
+            document.getElementById('statusDisplay').textContent = 'Failed';
+            document.getElementById('statusDisplay').style.color = '#ef4444';
+        } else if (data.status === 'running') {
+            // Show elapsed time
+            const elapsed = Math.round((Date.now() - trainingStartTime) / 1000);
+            const lastLine = document.querySelector('#logOutput .log-line:last-child');
+            
+            // Update the last line with elapsed time instead of adding new lines
+            if (lastLine && lastLine.textContent.includes('Training on GPU')) {
+                lastLine.textContent = `[${new Date().toLocaleTimeString()}] ⚡ Training on GPU... (${formatDuration(elapsed)})`;
+            } else if (pollCount === 0) {
+                addLogLine('⚡ Training on GPU...');
+            } else if (pollCount % 5 === 0) {
+                // Add elapsed time update every 15 seconds (5 polls * 3s)
+                addLogLine(`⚡ Training on GPU... (${formatDuration(elapsed)})`);
+            }
+            pollCount++;
+        }
+        
+    } catch (error) {
+        console.error('Status check failed:', error);
+    }
+}
+
+function showTrainingComplete(data) {
+    document.getElementById('trainingProgress').classList.add('hidden');
+    document.getElementById('trainingComplete').classList.remove('hidden');
+    
+    console.log('[TuneKit] Training complete data:', data);
+    
+    // Show base model name
+    if (data.base_model) {
+        document.getElementById('baseModelName').textContent = data.base_model;
+    }
+    
+    // Helper to format metric value
+    const formatValue = (key, value) => {
+        if (typeof value !== 'number') return value;
+        if (key.includes('accuracy') || key.includes('f1') || key.includes('precision') || key.includes('recall')) {
+            return (value * 100).toFixed(1) + '%';
+        }
+        return value.toFixed(4);
+    };
+    
+    // Helper to render metrics
+    const renderMetrics = (metrics, containerId, fallbackMetrics = null) => {
+        const container = document.getElementById(containerId);
+        
+        // Use fallback if primary metrics not available
+        const metricsToShow = metrics || fallbackMetrics;
+        
+        console.log(`[TuneKit] Rendering metrics for ${containerId}:`, metricsToShow);
+        
+        if (!metricsToShow || Object.keys(metricsToShow).length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">No metrics available</p>';
+            return;
+        }
+        
+        const keyMetrics = ['accuracy', 'f1', 'loss'];
+        let html = '';
+        
+        keyMetrics.forEach(key => {
+            // Try both 'accuracy' and 'eval_accuracy' formats
+            let value = metricsToShow[key];
+            if (value === undefined) {
+                value = metricsToShow[`eval_${key}`];
+            }
+            
+            if (value !== undefined) {
+                html += `
+                    <div class="card-metric">
+                        <span class="card-metric-label">${key}</span>
+                        <span class="card-metric-value">${formatValue(key, value)}</span>
+                    </div>
+                `;
+            }
+        });
+        
+        container.innerHTML = html || '<p style="color: var(--text-muted);">-</p>';
+    };
+    
+    // Check if this is an old training job (no comparison metrics)
+    const hasComparisonMetrics = data.base_metrics && data.finetuned_metrics;
+    
+    if (!hasComparisonMetrics && data.metrics) {
+        // Old training job - show a note and use regular metrics for fine-tuned
+        const comparisonContainer = document.querySelector('.comparison-container');
+        if (comparisonContainer && !comparisonContainer.previousElementSibling?.classList?.contains('comparison-note')) {
+            const note = document.createElement('div');
+            note.className = 'comparison-note';
+            note.style.cssText = 'background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; font-size: 13px; color: var(--text-secondary);';
+            note.innerHTML = 'ℹ️ This training was done before comparison metrics were added. <strong>Retrain to see before/after comparison!</strong>';
+            comparisonContainer.parentNode.insertBefore(note, comparisonContainer);
+        }
+    }
+    
+    // Render base metrics (or show "N/A" for old jobs)
+    if (hasComparisonMetrics) {
+        renderMetrics(data.base_metrics, 'baseMetrics');
+    } else {
+        document.getElementById('baseMetrics').innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">Not available (retrain to see)</p>';
+    }
+    
+    // Render fine-tuned metrics (use fallback for old jobs)
+    // For old jobs, data.metrics should have the fine-tuned metrics
+    const finetunedMetrics = data.finetuned_metrics || data.metrics;
+    renderMetrics(finetunedMetrics, 'tunedMetrics');
+    
+    // Show improvement summary
+    const improvementSummary = document.getElementById('improvementSummary');
+    if (data.improvement) {
+        let html = '';
+        Object.entries(data.improvement).forEach(([key, value]) => {
+            const isPositive = value > 0;
+            const icon = isPositive ? '📈' : '📉';
+            const sign = isPositive ? '+' : '';
+            html += `
+                <div class="improvement-badge ${isPositive ? '' : 'negative'}">
+                    <span class="improvement-icon">${icon}</span>
+                    <span class="improvement-text">${key}: ${sign}${value.toFixed(1)}%</span>
+                </div>
+            `;
+        });
+        improvementSummary.innerHTML = html;
+    } else {
+        improvementSummary.innerHTML = '';
+    }
+    
+    // Setup "Try it out" comparison
+    setupTryItOut();
+    
+    // Set download URL
+    const downloadUrl = `${API_URL}/download-model-zip/${jobId}`;
+    
+    downloadModelBtn.onclick = async (e) => {
+        e.preventDefault();
+        
+        const originalText = downloadModelBtn.innerHTML;
+        downloadModelBtn.innerHTML = '⏳ Downloading...';
+        downloadModelBtn.style.pointerEvents = 'none';
+        
+        try {
+            const response = await fetch(downloadUrl);
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Download failed');
+            }
+            
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tunekit_model_${jobId}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+            
+            downloadModelBtn.innerHTML = '✅ Downloaded!';
+            setTimeout(() => {
+                downloadModelBtn.innerHTML = originalText;
+                downloadModelBtn.style.pointerEvents = 'auto';
+            }, 2000);
+            
+        } catch (error) {
+            alert('Download failed: ' + error.message);
+            downloadModelBtn.innerHTML = originalText;
+            downloadModelBtn.style.pointerEvents = 'auto';
+        }
+    };
+}
+
+// ============================================================================
+// TRY IT OUT - COMPARE MODELS
+// ============================================================================
+
+function setupTryItOut() {
+    const tryBtn = document.getElementById('tryBtn');
+    const tryInput = document.getElementById('tryInput');
+    const tryResults = document.getElementById('tryResults');
+    
+    tryBtn.onclick = async () => {
+        const text = tryInput.value.trim();
+        if (!text) {
+            alert('Please enter some text to classify');
+            return;
+        }
+        
+        tryBtn.disabled = true;
+        tryBtn.textContent = 'Running...';
+        
+        try {
+            // Clear previous results
+            tryResults.classList.add('hidden');
+            
+            const response = await fetch(`${API_URL}/compare`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId, text: text }),
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Show results
+            tryResults.classList.remove('hidden');
+            
+            if (data.base) {
+                document.getElementById('basePrediction').textContent = data.base.prediction || '-';
+                document.getElementById('baseConfidence').textContent = 
+                    data.base.confidence ? `${data.base.confidence}% confidence` : '';
+            } else {
+                document.getElementById('basePrediction').textContent = '-';
+                document.getElementById('baseConfidence').textContent = '';
+            }
+            
+            if (data.finetuned) {
+                document.getElementById('tunedPrediction').textContent = data.finetuned.prediction || '-';
+                document.getElementById('tunedConfidence').textContent = 
+                    data.finetuned.confidence ? `${data.finetuned.confidence}% confidence` : '';
+            } else {
+                document.getElementById('tunedPrediction').textContent = '-';
+                document.getElementById('tunedConfidence').textContent = '';
+            }
+            
+        } catch (error) {
+            console.error('Comparison error:', error);
+            alert('❌ Comparison failed: ' + error.message + '\n\nThis might take 10-15 seconds to spin up the GPU. Try again?');
+        } finally {
+            tryBtn.disabled = false;
+            tryBtn.textContent = 'Compare Models';
+        }
+    };
+}
+
+// ============================================================================
+// GENERATE LOCAL PACKAGE
 // ============================================================================
 
 generateBtn.addEventListener('click', async () => {
@@ -289,10 +653,15 @@ generateBtn.addEventListener('click', async () => {
             throw new Error(data.detail || 'Generation failed');
         }
         
+        // Show download package section
+        document.getElementById('trainingProgress').classList.add('hidden');
+        document.getElementById('trainingComplete').classList.add('hidden');
+        document.getElementById('downloadPackage').classList.remove('hidden');
+        
         // Update download link
         downloadBtn.href = `${API_URL}${data.download_url}`;
         
-        setStep(4);
+        setStep(5);
         
     } catch (error) {
         alert('Generation failed: ' + error.message);
@@ -307,11 +676,21 @@ generateBtn.addEventListener('click', async () => {
 
 backToUpload.addEventListener('click', () => setStep(1));
 backToAnalysis.addEventListener('click', () => setStep(2));
+backToPlan.addEventListener('click', () => setStep(3));
 
 startOver.addEventListener('click', () => {
     sessionId = null;
+    jobId = null;
+    stopStatusPolling();
     clearFile();
     description.value = '';
+    
+    // Reset step 5 views
+    document.getElementById('trainingProgress').classList.add('hidden');
+    document.getElementById('trainingComplete').classList.add('hidden');
+    document.getElementById('downloadPackage').classList.add('hidden');
+    document.getElementById('logOutput').innerHTML = '<div class="log-line">Initializing training environment...</div>';
+    
     setStep(1);
 });
 
@@ -343,6 +722,24 @@ function formatTaskType(type) {
     return map[type] || type;
 }
 
+function formatMetricKey(key) {
+    return key
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function formatDuration(seconds) {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+}
+
 // Initialize
 setStep(1);
-

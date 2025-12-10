@@ -39,7 +39,12 @@
             <div class="step-line"></div>
             <div class="step" data-step="4">
                 <div class="step-number">4</div>
-                <div class="step-label">Generate</div>
+                <div class="step-label">Train</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="5">
+                <div class="step-number">5</div>
+                <div class="step-label">Done</div>
             </div>
         </div>
 
@@ -146,46 +151,199 @@
 
                 <div class="button-group">
                     <button class="btn btn-secondary" id="backToAnalysis">← Back</button>
-                    <button class="btn btn-primary" id="generateBtn">
-                        <span class="btn-text">Generate Training Package</span>
-                        <span class="btn-loader hidden"></span>
+                    <button class="btn btn-primary" id="continueToTrainBtn">
+                        Continue to Training →
                     </button>
                 </div>
             </section>
 
-            <!-- Step 4: Download -->
+            <!-- Step 4: Train -->
             <section class="card step-content" id="step4">
-                <h2>🎉 Package Ready!</h2>
-                
-                <div class="success-message">
-                    <div class="success-icon">✓</div>
-                    <p>Your training package has been generated successfully.</p>
+                <h2>🚀 Start Training</h2>
+                <p class="subtitle">Choose how you want to train your model</p>
+
+                <div class="train-options">
+                    <!-- Cloud Training Option -->
+                    <div class="train-option train-cloud">
+                        <div class="train-option-icon">☁️</div>
+                        <div class="train-option-content">
+                            <h3>Train on Cloud</h3>
+                            <p>Run training on Modal's GPU servers. No setup required!</p>
+                            <ul class="train-features">
+                                <li>✓ T4/A10G GPUs available</li>
+                                <li>✓ Pay only for compute time</li>
+                                <li>✓ Download trained model when done</li>
+                            </ul>
+                            <button class="btn btn-primary" id="trainCloudBtn">
+                                <span class="btn-text">Train on Cloud</span>
+                                <span class="btn-loader hidden"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="train-divider">
+                        <span>OR</span>
+                    </div>
+
+                    <!-- Local Training Option -->
+                    <div class="train-option train-local">
+                        <div class="train-option-icon">💻</div>
+                        <div class="train-option-content">
+                            <h3>Train Locally</h3>
+                            <p>Download scripts and run on your own hardware.</p>
+                            <ul class="train-features">
+                                <li>✓ Full control over training</li>
+                                <li>✓ Use your own GPU</li>
+                                <li>✓ Customize as needed</li>
+                            </ul>
+                            <button class="btn btn-secondary" id="generateBtn">
+                                <span class="btn-text">Download Package</span>
+                                <span class="btn-loader hidden"></span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="package-info">
-                    <h3>Package Contents</h3>
-                    <ul class="package-files">
-                        <li><code>config.json</code> - Training configuration</li>
-                        <li><code>train.py</code> - HuggingFace training script</li>
-                        <li><code>eval.py</code> - Evaluation script</li>
-                        <li><code>requirements.txt</code> - Dependencies</li>
-                        <li><code>README.md</code> - Instructions</li>
-                    </ul>
+                <div class="button-group">
+                    <button class="btn btn-secondary" id="backToPlan">← Back to Plan</button>
+                </div>
+            </section>
+
+            <!-- Step 5: Training Status / Complete -->
+            <section class="card step-content" id="step5">
+                <!-- Training in Progress -->
+                <div id="trainingProgress" class="hidden">
+                    <h2>⚡ Training in Progress</h2>
+                    
+                    <div class="training-status-card">
+                        <div class="training-spinner"></div>
+                        <div class="training-info">
+                            <div class="training-job-id">Job: <span id="jobIdDisplay">-</span></div>
+                            <div class="training-status">Status: <span id="statusDisplay">Running</span></div>
+                            <div class="training-time">Started: <span id="startTimeDisplay">-</span></div>
+                        </div>
+                    </div>
+
+                    <div class="training-log">
+                        <h3>Training Log</h3>
+                        <div class="log-output" id="logOutput">
+                            <div class="log-line">Initializing training environment...</div>
+                        </div>
+                    </div>
+
+                    <p class="training-note">Training typically takes 5-30 minutes depending on dataset size.</p>
                 </div>
 
-                <div class="download-section">
-                    <a class="btn btn-primary btn-large" id="downloadBtn" href="#">
-                        ⬇️ Download Package (.zip)
-                    </a>
+                <!-- Training Complete -->
+                <div id="trainingComplete" class="hidden">
+                    <h2>🎉 Training Complete!</h2>
+                    
+                    <div class="success-message">
+                        <div class="success-icon">✓</div>
+                        <p>Your model has been fine-tuned and is ready to use!</p>
+                    </div>
+
+                    <!-- Metrics Comparison -->
+                    <h3 class="section-title">📊 Performance Comparison</h3>
+                    <div class="comparison-container">
+                        <div class="comparison-card base-card">
+                            <div class="card-header">
+                                <span class="card-badge">Before</span>
+                                <h4>Base Model</h4>
+                                <p class="model-name" id="baseModelName">-</p>
+                            </div>
+                            <div class="card-metrics" id="baseMetrics">
+                                <!-- Base metrics inserted here -->
+                            </div>
+                        </div>
+                        
+                        <div class="comparison-arrow">
+                            <span>→</span>
+                        </div>
+                        
+                        <div class="comparison-card tuned-card">
+                            <div class="card-header">
+                                <span class="card-badge badge-success">After</span>
+                                <h4>Fine-tuned Model</h4>
+                                <p class="model-name">Your Custom Model</p>
+                            </div>
+                            <div class="card-metrics" id="tunedMetrics">
+                                <!-- Fine-tuned metrics inserted here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Improvement Summary -->
+                    <div class="improvement-summary" id="improvementSummary">
+                        <!-- Improvement badges inserted here -->
+                    </div>
+
+                    <!-- Try It Out Section -->
+                    <h3 class="section-title">🧪 Try It Out</h3>
+                    <div class="try-it-section">
+                        <p class="try-it-desc">Test your fine-tuned model with custom input:</p>
+                        <div class="try-it-input">
+                            <textarea id="tryInput" placeholder="Enter text to classify..." rows="3"></textarea>
+                            <button class="btn btn-primary" id="tryBtn">Compare Models</button>
+                        </div>
+                        
+                        <div class="try-it-results hidden" id="tryResults">
+                            <div class="try-result base-result">
+                                <div class="result-label">Base Model</div>
+                                <div class="result-prediction" id="basePrediction">-</div>
+                                <div class="result-confidence" id="baseConfidence">-</div>
+                            </div>
+                            <div class="try-result tuned-result">
+                                <div class="result-label">Fine-tuned</div>
+                                <div class="result-prediction" id="tunedPrediction">-</div>
+                                <div class="result-confidence" id="tunedConfidence">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Download Section -->
+                    <div class="download-section">
+                        <a class="btn btn-primary btn-large" id="downloadModelBtn" href="#" download>
+                            📦 Download Model (.zip)
+                        </a>
+                        <p class="download-hint">Includes model weights, tokenizer, and config</p>
+                    </div>
                 </div>
 
-                <div class="next-steps">
-                    <h3>Next Steps</h3>
-                    <ol>
-                        <li>Unzip the package</li>
-                        <li>Run <code>pip install -r requirements.txt</code></li>
-                        <li>Run <code>python train.py</code></li>
-                    </ol>
+                <!-- Download Package (Local option) -->
+                <div id="downloadPackage" class="hidden">
+                    <h2>🎉 Package Ready!</h2>
+                    
+                    <div class="success-message">
+                        <div class="success-icon">✓</div>
+                        <p>Your training package has been generated.</p>
+                    </div>
+
+                    <div class="package-info">
+                        <h3>Package Contents</h3>
+                        <ul class="package-files">
+                            <li><code>config.json</code> - Training configuration</li>
+                            <li><code>train.py</code> - HuggingFace training script</li>
+                            <li><code>eval.py</code> - Evaluation script</li>
+                            <li><code>requirements.txt</code> - Dependencies</li>
+                            <li><code>README.md</code> - Instructions</li>
+                        </ul>
+                    </div>
+
+                    <div class="download-section">
+                        <a class="btn btn-primary btn-large" id="downloadBtn" href="#">
+                            ⬇️ Download Package (.zip)
+                        </a>
+                    </div>
+
+                    <div class="next-steps">
+                        <h3>Next Steps</h3>
+                        <ol>
+                            <li>Unzip the package</li>
+                            <li>Run <code>pip install -r requirements.txt</code></li>
+                            <li>Run <code>python train.py</code></li>
+                        </ol>
+                    </div>
                 </div>
 
                 <button class="btn btn-secondary" id="startOver">Start New Project</button>
@@ -198,7 +356,7 @@
         </footer>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>
 

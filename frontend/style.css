@@ -572,10 +572,27 @@ body {
     border-radius: 4px;
 }
 
+/* Metrics Title */
+.metrics-title {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+}
+
 /* Download Section */
 .download-section {
     text-align: center;
     margin: 32px 0;
+}
+
+.download-hint {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
 }
 
 /* Next Steps */
@@ -641,6 +658,489 @@ body {
     .button-group {
         flex-direction: column;
     }
+}
+
+/* ============================================================================
+   TRAINING OPTIONS
+   ============================================================================ */
+
+.train-options {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin: 24px 0;
+}
+
+.train-option {
+    display: flex;
+    gap: 20px;
+    padding: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+}
+
+.train-option:hover {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.train-option-icon {
+    font-size: 40px;
+    flex-shrink: 0;
+}
+
+.train-option-content {
+    flex: 1;
+}
+
+.train-option-content h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.train-option-content p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.train-features {
+    list-style: none;
+    margin-bottom: 20px;
+}
+
+.train-features li {
+    padding: 4px 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.train-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.train-divider::before,
+.train-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+/* ============================================================================
+   TRAINING STATUS
+   ============================================================================ */
+
+.training-status-card {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 32px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin: 24px 0;
+}
+
+.training-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.training-info {
+    flex: 1;
+}
+
+.training-job-id {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.training-job-id span {
+    color: var(--accent-secondary);
+}
+
+.training-status {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.training-status span {
+    color: var(--success);
+}
+
+.training-time {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* Training Log */
+.training-log {
+    margin: 24px 0;
+}
+
+.training-log h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.log-output {
+    background: #0d0d12;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    height: 200px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.log-line {
+    padding: 6px 0;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    transition: color 0.2s;
+}
+
+.log-line:last-child {
+    border-bottom: none;
+    color: var(--text-primary);
+}
+
+.log-line.log-success {
+    color: var(--success);
+}
+
+.log-line.log-error {
+    color: var(--error);
+}
+
+.training-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 16px;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin: 32px 0;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.metric-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.metric-card.metric-highlight {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05));
+    border-color: var(--accent-primary);
+}
+
+.metric-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.metric-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.metric-highlight .metric-value {
+    color: var(--accent-secondary);
+}
+
+/* ============================================
+   COMPARISON UI
+   ============================================ */
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 32px 0 16px;
+}
+
+/* Comparison Container */
+.comparison-container {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    margin: 20px 0 24px;
+}
+
+.comparison-card {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    transition: all 0.3s;
+}
+
+.comparison-card.base-card {
+    opacity: 0.8;
+}
+
+.comparison-card.tuned-card {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.02));
+}
+
+.comparison-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--success);
+    font-weight: bold;
+}
+
+.card-header {
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.card-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.card-badge.badge-success {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--success);
+}
+
+.card-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.card-header .model-name {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.card-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.card-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.card-metric-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.card-metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.tuned-card .card-metric-value {
+    color: var(--accent-secondary);
+}
+
+/* Improvement Summary */
+.improvement-summary {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin: 24px 0;
+    flex-wrap: wrap;
+}
+
+.improvement-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 24px;
+}
+
+.improvement-badge.negative {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.improvement-icon {
+    font-size: 16px;
+}
+
+.improvement-text {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.improvement-badge .improvement-text {
+    color: var(--success);
+}
+
+.improvement-badge.negative .improvement-text {
+    color: var(--error);
+}
+
+/* Try It Out Section */
+.try-it-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    margin: 20px 0 32px;
+}
+
+.try-it-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.try-it-input {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.try-it-input textarea {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    resize: none;
+    font-family: var(--font-main);
+}
+
+.try-it-input textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.try-it-input button {
+    white-space: nowrap;
+}
+
+.try-it-results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.try-result {
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.try-result.base-result {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+}
+
+.try-result.tuned-result {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid var(--accent-primary);
+}
+
+.result-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.result-prediction {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.tuned-result .result-prediction {
+    color: var(--accent-secondary);
+}
+
+.result-confidence {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* Loading state for try button */
+.try-it-input button:disabled {
+    opacity: 0.7;
+    cursor: wait;
 }
 
 /* Hidden utility */

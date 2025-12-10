@@ -12,10 +12,10 @@ import modal
 
 app = modal.App("tunekit-training")
 
-# Base image with ML dependencies
+# Base image with ML dependencies (v2 - force rebuild)
 training_image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "torch>=2.0.0",
-    "transformers>=4.36.0",
+    "transformers>=4.45.0",  # Updated version
     "datasets>=2.14.0",
     "accelerate>=0.24.0",
     "scikit-learn>=1.3.0",
@@ -85,12 +85,14 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
         
         # Load dataset
         dataset = load_dataset("csv", data_files=data_path, split="train")
-        dataset = dataset.train_test_split(test_size=0.2, seed=42)
         
-        # Create label mapping
-        labels = dataset["train"].unique(config["label_column"])
+        # Create label mapping from ALL data BEFORE split
+        labels = sorted(dataset.unique(config["label_column"]))
         label2id = {label: i for i, label in enumerate(labels)}
         id2label = {i: label for label, i in label2id.items()}
+        
+        # Now split
+        dataset = dataset.train_test_split(test_size=0.2, seed=42)
         
         model.config.label2id = label2id
         model.config.id2label = id2label
@@ -131,7 +133,7 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
             num_train_epochs=config["num_epochs"],
             warmup_ratio=config.get("warmup_ratio", 0.1),
             weight_decay=config.get("weight_decay", 0.01),
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             save_strategy="epoch",
             load_best_model_at_end=True,
             metric_for_best_model="accuracy",
@@ -149,6 +151,14 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
             compute_metrics=compute_metrics,
         )
         
+        # ============================================
+        # EVALUATE BASE MODEL BEFORE TRAINING
+        # ============================================
+        print("[TuneKit] Evaluating base model (before fine-tuning)...")
+        base_metrics = trainer.evaluate()
+        base_metrics = {k.replace("eval_", ""): v for k, v in base_metrics.items()}
+        print(f"[TuneKit] Base model metrics: {base_metrics}")
+        
         print("[TuneKit] Training started...")
         trainer.train()
         
@@ -163,15 +173,33 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
         # Commit to volume
         model_volume.commit()
         
-        # Final evaluation
-        results = trainer.evaluate()
-        print(f"[TuneKit] Training complete! Results: {results}")
+        # Final evaluation (after fine-tuning)
+        finetuned_metrics = trainer.evaluate()
+        finetuned_metrics = {k.replace("eval_", ""): v for k, v in finetuned_metrics.items()}
+        print(f"[TuneKit] Fine-tuned model metrics: {finetuned_metrics}")
+        
+        # Calculate improvement
+        improvement = {}
+        for key in ["accuracy", "f1"]:
+            if key in base_metrics and key in finetuned_metrics:
+                base_val = base_metrics[key]
+                tuned_val = finetuned_metrics[key]
+                if base_val > 0:
+                    pct_change = ((tuned_val - base_val) / base_val) * 100
+                    improvement[key] = round(pct_change, 2)
+        
+        print(f"[TuneKit] Training complete! Improvement: {improvement}")
         
         return {
             "status": "completed",
             "job_id": job_id,
-            "metrics": results,
+            "base_metrics": base_metrics,
+            "finetuned_metrics": finetuned_metrics,
+            "improvement": improvement,
+            "metrics": finetuned_metrics,  # Keep for backward compat
             "model_path": output_dir,
+            "base_model": config["base_model"],
+            "task_type": "classification",
         }
         
     except Exception as e:
@@ -290,7 +318,7 @@ def train_ner(config: dict, data_content: str, job_id: str) -> dict:
             num_train_epochs=config["num_epochs"],
             warmup_ratio=config.get("warmup_ratio", 0.1),
             weight_decay=config.get("weight_decay", 0.01),
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             save_strategy="epoch",
             load_best_model_at_end=True,
             metric_for_best_model="f1",
@@ -433,7 +461,7 @@ def train_instruction(config: dict, data_content: str, job_id: str) -> dict:
             num_train_epochs=config["num_epochs"],
             warmup_ratio=config.get("warmup_ratio", 0.1),
             weight_decay=config.get("weight_decay", 0.01),
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             save_strategy="epoch",
             gradient_accumulation_steps=config.get("gradient_accumulation_steps", 4),
             fp16=True,
@@ -532,4 +560,122 @@ def download_model_file(job_id: str, filename: str) -> bytes:
     
     with open(filepath, "rb") as f:
         return f.read()
+
+
+# =============================================================================
+# INFERENCE COMPARISON
+# =============================================================================
+
+@app.function(
+    image=training_image,
+    gpu="T4",
+    timeout=120,
+    volumes={MODEL_DIR: model_volume},
+)
+def compare_inference(job_id: str, text: str, task_type: str = "classification") -> dict:
+    """
+    Compare base model vs fine-tuned model predictions.
+    
+    Args:
+        job_id: Job ID of the fine-tuned model
+        text: Input text to classify/process
+        task_type: "classification" or "ner"
+    
+    Returns:
+        dict with base_prediction and finetuned_prediction
+    """
+    import json
+    import os
+    import torch
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    import torch.nn.functional as F
+    
+    model_path = f"{MODEL_DIR}/{job_id}"
+    config_path = f"{model_path}/tunekit_config.json"
+    
+    if not os.path.exists(model_path):
+        return {"error": f"Model not found: {job_id}"}
+    
+    # Load config to get base model name and labels
+    with open(config_path) as f:
+        config = json.load(f)
+    
+    base_model_name = config["base_model"]
+    
+    # Load tokenizer (same for both)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    
+    # Tokenize input
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    
+    results = {}
+    
+    # Helper to get label from id2label (handles both int and str keys)
+    def get_label(id2label, idx):
+        if not id2label:
+            return str(idx)
+        # Try int key first, then str key
+        if idx in id2label:
+            return str(id2label[idx])
+        if str(idx) in id2label:
+            return str(id2label[str(idx)])
+        return str(idx)
+    
+    # ============================================
+    # FINE-TUNED MODEL PREDICTION (load first to get id2label)
+    # ============================================
+    print(f"[TuneKit] Loading fine-tuned model: {model_path}")
+    finetuned_model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    finetuned_model.eval()
+    
+    # Get id2label from the fine-tuned model (this has the correct labels)
+    id2label = {}
+    if hasattr(finetuned_model.config, 'id2label') and finetuned_model.config.id2label:
+        id2label = finetuned_model.config.id2label
+    print(f"[TuneKit] Labels: {id2label}")
+    
+    with torch.no_grad():
+        outputs = finetuned_model(**inputs)
+        probs = F.softmax(outputs.logits, dim=-1)
+        pred_idx = torch.argmax(probs, dim=-1).item()
+        confidence = probs[0][pred_idx].item()
+    
+    finetuned_label = get_label(id2label, pred_idx)
+    
+    results["finetuned"] = {
+        "prediction": finetuned_label,
+        "confidence": round(confidence * 100, 2),
+        "model": f"tunekit/{job_id}",
+    }
+    
+    # Free memory
+    del finetuned_model
+    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+    
+    # ============================================
+    # BASE MODEL PREDICTION
+    # ============================================
+    print(f"[TuneKit] Loading base model: {base_model_name}")
+    base_model = AutoModelForSequenceClassification.from_pretrained(
+        base_model_name,
+        num_labels=config["num_labels"],
+    )
+    base_model.eval()
+    
+    with torch.no_grad():
+        outputs = base_model(**inputs)
+        probs = F.softmax(outputs.logits, dim=-1)
+        pred_idx = torch.argmax(probs, dim=-1).item()
+        confidence = probs[0][pred_idx].item()
+    
+    # Use the same id2label from fine-tuned model for base model too
+    base_label = get_label(id2label, pred_idx)
+    
+    results["base"] = {
+        "prediction": base_label,
+        "confidence": round(confidence * 100, 2),
+        "model": base_model_name,
+    }
+    
+    return results
 
