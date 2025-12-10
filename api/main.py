@@ -13,7 +13,8 @@ from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Add parent directory to path for imports
@@ -53,6 +54,10 @@ sessions: dict[str, dict] = {}
 # Upload directory
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Serve static files (frontend)
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 # ============================================================================
@@ -129,8 +134,16 @@ def create_empty_state(file_path: str, user_description: str = "") -> TuneKitSta
 # ENDPOINTS
 # ============================================================================
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
+    """Serve the frontend."""
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    with open(index_path, "r") as f:
+        return f.read()
+
+
+@app.get("/health")
+async def health():
     """Health check."""
     return {"status": "ok", "message": "TuneKit API is running"}
 
