@@ -125,10 +125,6 @@ class TrainResponse(BaseModel):
     message: str
 
 
-class TrainingStatusRequest(BaseModel):
-    job_id: str
-
-
 class TrainingStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -460,39 +456,10 @@ async def train(request: TrainRequest):
     )
 
 
-@app.post("/training-status", response_model=TrainingStatusResponse)
-async def training_status(request: TrainingStatusRequest):
+@app.get("/training-status/{job_id}", response_model=TrainingStatusResponse)
+async def training_status(job_id: str):
     """
     Check the status of a training job.
-    """
-    job_id = request.job_id
-    
-    result = get_training_status(job_id)
-    
-    # Update session state if we have the job
-    for session in sessions.values():
-        state = session.get("state")
-        if state and state.get("job_id") == job_id:
-            state["job_status"] = result["status"]
-            if result.get("metrics"):
-                state["metrics"] = result["metrics"]
-            break
-    
-    return TrainingStatusResponse(
-        job_id=job_id,
-        status=result["status"],
-        metrics=result.get("metrics"),
-        error=result.get("error"),
-        started_at=result.get("started_at"),
-        completed_at=result.get("completed_at"),
-        message=result.get("message"),
-    )
-
-
-@app.get("/training-status/{job_id}", response_model=TrainingStatusResponse)
-async def training_status_get(job_id: str):
-    """
-    Check the status of a training job (GET version).
     """
     result = get_training_status(job_id)
     
