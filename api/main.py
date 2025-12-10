@@ -28,6 +28,11 @@ from tunekit import (
     planning_agent,
     generate_package,
 )
+from tunekit.training import (
+    start_training,
+    get_training_status,
+    get_model_download_url,
+)
 
 # ============================================================================
 # APP SETUP
@@ -107,6 +112,40 @@ class GenerateResponse(BaseModel):
     session_id: str
     package_path: str
     download_url: str
+
+
+class TrainRequest(BaseModel):
+    session_id: str
+
+
+class TrainResponse(BaseModel):
+    session_id: str
+    job_id: str
+    status: str
+    message: str
+
+
+class TrainingStatusRequest(BaseModel):
+    job_id: str
+
+
+class TrainingStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    metrics: Optional[dict] = None
+    error: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    message: Optional[str] = None
+
+
+class ModelDownloadResponse(BaseModel):
+    job_id: str
+    status: str
+    files: Optional[list] = None
+    download_endpoint: Optional[str] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
 
 
 # ============================================================================
@@ -352,6 +391,10 @@ def _get_current_step(state: dict) -> str:
     """Determine which step the session is at."""
     if not state:
         return "uploaded"
+    if state.get("job_status") == "completed":
+        return "trained"
+    if state.get("job_id"):
+        return "training"
     if state.get("package_path"):
         return "generated"
     if state.get("final_task_type"):
@@ -361,6 +404,161 @@ def _get_current_step(state: dict) -> str:
     if state.get("raw_data"):
         return "ingested"
     return "uploaded"
+
+
+# ============================================================================
+# TRAINING ENDPOINTS (Modal)
+# ============================================================================
+
+@app.post("/train", response_model=TrainResponse)
+async def train(request: TrainRequest):
+    """
+    Start training on Modal cloud GPUs.
+    
+    Requires: /plan to be completed first.
+    """
+    session_id = request.session_id
+    
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = sessions[session_id]
+    state = session.get("state")
+    
+    if not state or not state.get("final_task_type"):
+        raise HTTPException(status_code=400, detail="Run /plan first to configure training")
+    
+    # Check if already training
+    if state.get("job_id") and state.get("job_status") == "running":
+        return TrainResponse(
+            session_id=session_id,
+            job_id=state["job_id"],
+            status="already_running",
+            message="Training is already in progress",
+        )
+    
+    # Start training on Modal
+    result = start_training(
+        task_type=state["final_task_type"],
+        config=state["training_config"],
+        data_path=state["file_path"],
+    )
+    
+    if result["status"] == "failed":
+        raise HTTPException(status_code=500, detail=result.get("error", "Training failed to start"))
+    
+    # Update state with job info
+    state["job_id"] = result["job_id"]
+    state["job_status"] = "running"
+    sessions[session_id]["state"] = state
+    
+    return TrainResponse(
+        session_id=session_id,
+        job_id=result["job_id"],
+        status="running",
+        message=result.get("message", "Training started on Modal GPU"),
+    )
+
+
+@app.post("/training-status", response_model=TrainingStatusResponse)
+async def training_status(request: TrainingStatusRequest):
+    """
+    Check the status of a training job.
+    """
+    job_id = request.job_id
+    
+    result = get_training_status(job_id)
+    
+    # Update session state if we have the job
+    for session in sessions.values():
+        state = session.get("state")
+        if state and state.get("job_id") == job_id:
+            state["job_status"] = result["status"]
+            if result.get("metrics"):
+                state["metrics"] = result["metrics"]
+            break
+    
+    return TrainingStatusResponse(
+        job_id=job_id,
+        status=result["status"],
+        metrics=result.get("metrics"),
+        error=result.get("error"),
+        started_at=result.get("started_at"),
+        completed_at=result.get("completed_at"),
+        message=result.get("message"),
+    )
+
+
+@app.get("/training-status/{job_id}", response_model=TrainingStatusResponse)
+async def training_status_get(job_id: str):
+    """
+    Check the status of a training job (GET version).
+    """
+    result = get_training_status(job_id)
+    
+    # Update session state if we have the job
+    for session in sessions.values():
+        state = session.get("state")
+        if state and state.get("job_id") == job_id:
+            state["job_status"] = result["status"]
+            if result.get("metrics"):
+                state["metrics"] = result["metrics"]
+            break
+    
+    return TrainingStatusResponse(
+        job_id=job_id,
+        status=result["status"],
+        metrics=result.get("metrics"),
+        error=result.get("error"),
+        started_at=result.get("started_at"),
+        completed_at=result.get("completed_at"),
+        message=result.get("message"),
+    )
+
+
+@app.get("/download-model/{job_id}", response_model=ModelDownloadResponse)
+async def download_model_info(job_id: str):
+    """
+    Get download information for a trained model.
+    """
+    result = get_model_download_url(job_id)
+    
+    return ModelDownloadResponse(
+        job_id=job_id,
+        status=result["status"],
+        files=result.get("files"),
+        download_endpoint=result.get("download_endpoint"),
+        error=result.get("error"),
+        message=result.get("message"),
+    )
+
+
+@app.get("/download-model/{job_id}/{filename:path}")
+async def download_model_file(job_id: str, filename: str):
+    """
+    Download a specific file from the trained model.
+    """
+    from tunekit.training.modal_service import download_model_file_content
+    
+    content = download_model_file_content(job_id, filename)
+    
+    if content is None:
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+    
+    # Determine media type
+    if filename.endswith(".json"):
+        media_type = "application/json"
+    elif filename.endswith(".bin") or filename.endswith(".safetensors"):
+        media_type = "application/octet-stream"
+    else:
+        media_type = "application/octet-stream"
+    
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ============================================================================
