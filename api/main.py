@@ -32,6 +32,7 @@ from tunekit.training import (
     start_training,
     get_training_status,
     get_model_download_url,
+    compare_models,
 )
 
 # ============================================================================
@@ -45,11 +46,13 @@ app = FastAPI(
 )
 
 # CORS for frontend
+# In production, set ALLOWED_ORIGINS environment variable
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -129,10 +132,26 @@ class TrainingStatusResponse(BaseModel):
     job_id: str
     status: str
     metrics: Optional[dict] = None
+    base_metrics: Optional[dict] = None
+    finetuned_metrics: Optional[dict] = None
+    improvement: Optional[dict] = None
+    base_model: Optional[str] = None
+    task_type: Optional[str] = None
     error: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     message: Optional[str] = None
+
+
+class CompareRequest(BaseModel):
+    job_id: str
+    text: str
+
+
+class CompareResponse(BaseModel):
+    base: Optional[dict] = None
+    finetuned: Optional[dict] = None
+    error: Optional[str] = None
 
 
 class ModelDownloadResponse(BaseModel):
@@ -193,17 +212,41 @@ async def upload_file(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     
-    ext = os.path.splitext(file.filename)[1].lower()
+    # Security: Sanitize filename to prevent path traversal
+    from pathlib import Path
+    filename = os.path.basename(file.filename)  # Remove any path components
+    # Only allow alphanumeric, dots, dashes, underscores
+    filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+    if not filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    ext = os.path.splitext(filename)[1].lower()
     if ext not in [".csv", ".json", ".jsonl"]:
         raise HTTPException(status_code=400, detail="Unsupported file type. Use .csv, .json, or .jsonl")
+    
+    # File size limit (100MB)
+    MAX_FILE_SIZE = 100 * 1024 * 1024
     
     # Create session
     session_id = str(uuid.uuid4())[:8]
     
     # Save file
-    file_path = os.path.join(UPLOAD_DIR, f"{session_id}_{file.filename}")
+    file_path = os.path.join(UPLOAD_DIR, f"{session_id}_{filename}")
+    
+    # Ensure path is within UPLOAD_DIR (prevent path traversal)
+    resolved_path = Path(file_path).resolve()
+    resolved_upload_dir = Path(UPLOAD_DIR).resolve()
+    try:
+        resolved_path.relative_to(resolved_upload_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    
+    # Read and validate size
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB")
+    
     with open(file_path, "wb") as f:
-        content = await file.read()
         f.write(content)
     
     # Initialize session
@@ -476,6 +519,11 @@ async def training_status(job_id: str):
         job_id=job_id,
         status=result["status"],
         metrics=result.get("metrics"),
+        base_metrics=result.get("base_metrics"),
+        finetuned_metrics=result.get("finetuned_metrics"),
+        improvement=result.get("improvement"),
+        base_model=result.get("base_model"),
+        task_type=result.get("task_type"),
         error=result.get("error"),
         started_at=result.get("started_at"),
         completed_at=result.get("completed_at"),
@@ -506,6 +554,13 @@ async def download_model_file(job_id: str, filename: str):
     Download a specific file from the trained model.
     """
     from tunekit.training.modal_service import download_model_file_content
+    from pathlib import Path
+    
+    # Security: Sanitize filename to prevent path traversal
+    filename = os.path.basename(filename)  # Remove any path components
+    # Only allow safe characters
+    if not all(c.isalnum() or c in "._-/" for c in filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
     
     content = download_model_file_content(job_id, filename)
     
@@ -525,6 +580,71 @@ async def download_model_file(job_id: str, filename: str):
         content=content,
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/download-model-zip/{job_id}")
+async def download_model_zip(job_id: str):
+    """
+    Download all model files as a ZIP archive.
+    """
+    import tempfile
+    import zipfile
+    import io
+    
+    # Get model info first
+    result = get_model_download_url(job_id)
+    
+    if result["status"] != "ready":
+        raise HTTPException(
+            status_code=400, 
+            detail=result.get("error", "Model not ready for download")
+        )
+    
+    files = result.get("files", [])
+    if not files:
+        raise HTTPException(status_code=404, detail="No model files found")
+    
+    # Create ZIP in memory
+    from tunekit.training.modal_service import download_model_file_content
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for file_info in files:
+            filename = file_info["name"]
+            content = download_model_file_content(job_id, filename)
+            if content:
+                zip_file.writestr(filename, content)
+    
+    zip_buffer.seek(0)
+    
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=tunekit_model_{job_id}.zip"
+        }
+    )
+
+
+# ============================================================================
+# MODEL COMPARISON
+# ============================================================================
+
+@app.post("/compare", response_model=CompareResponse)
+async def compare_models_endpoint(request: CompareRequest):
+    """
+    Compare base model vs fine-tuned model predictions on custom input.
+    """
+    result = compare_models(request.job_id, request.text)
+    
+    if "error" in result:
+        return CompareResponse(error=result["error"])
+    
+    return CompareResponse(
+        base=result.get("base"),
+        finetuned=result.get("finetuned"),
     )
 
 
