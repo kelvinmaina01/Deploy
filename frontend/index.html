@@ -7,85 +7,143 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;450;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <div class="logo">
-                <span class="logo-icon">⚡</span>
-                <span class="logo-text">TuneKit</span>
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">⚡</span>
+                    <span class="logo-text">TuneKit</span>
+                </div>
+                <p class="tagline">Automated LLM Fine-Tuning Pipeline</p>
             </div>
-            <p class="tagline">Automated LLM Fine-Tuning Pipeline</p>
         </header>
 
         <!-- Progress Steps -->
         <div class="progress-bar">
             <div class="step active" data-step="1">
-                <div class="step-number">1</div>
+                <div class="step-number"><span>1</span></div>
                 <div class="step-label">Upload</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="2">
-                <div class="step-number">2</div>
+                <div class="step-number"><span>2</span></div>
                 <div class="step-label">Analyze</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="3">
-                <div class="step-number">3</div>
+                <div class="step-number"><span>3</span></div>
                 <div class="step-label">Plan</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="4">
-                <div class="step-number">4</div>
+                <div class="step-number"><span>4</span></div>
                 <div class="step-label">Train</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="5">
-                <div class="step-number">5</div>
+                <div class="step-number"><span>5</span></div>
                 <div class="step-label">Done</div>
             </div>
         </div>
 
         <!-- Main Content -->
         <main class="main">
-            <!-- Step 1: Upload -->
+            <!-- Step 1: Upload - Split Layout -->
             <section class="card step-content active" id="step1">
-                <h2>Upload Your Dataset</h2>
+                <h2>📤 Upload Your Dataset</h2>
                 <p class="subtitle">Supported formats: CSV, JSON, JSONL</p>
                 
-                <div class="upload-zone" id="dropZone">
-                    <div class="upload-icon">📁</div>
-                    <p>Drag & drop your file here</p>
-                    <span class="or">or</span>
-                    <label class="btn btn-secondary">
-                        Browse Files
-                        <input type="file" id="fileInput" accept=".csv,.json,.jsonl" hidden>
-                    </label>
-                </div>
-                
-                <div class="file-info hidden" id="fileInfo">
-                    <span class="file-icon">📄</span>
-                    <span class="file-name" id="fileName"></span>
-                    <button class="btn-remove" id="removeFile">✕</button>
+                <div class="upload-layout">
+                    <!-- Left Panel: Upload Zone -->
+                    <div class="upload-left">
+                        <div class="upload-zone" id="dropZone">
+                            <span class="upload-icon">📁</span>
+                            <p>Drag & drop your file here</p>
+                            <p class="formats">or click to browse</p>
+                            <span class="or">or</span>
+                            <label class="btn btn-secondary">
+                                Browse Files
+                                <input type="file" id="fileInput" accept=".csv,.json,.jsonl" hidden>
+                            </label>
+                        </div>
+                        
+                        <!-- File Info -->
+                        <div class="file-info hidden" id="fileInfo">
+                            <div class="file-icon">📄</div>
+                            <div class="file-details">
+                                <div class="file-name" id="fileName"></div>
+                                <div class="file-meta">
+                                    <span class="success" id="fileRows">✓ -- rows</span>
+                                    <span id="fileCols">-- cols</span>
+                                    <span id="fileSize">-- KB</span>
+                                </div>
+                            </div>
+                            <div class="file-actions">
+                                <button class="btn-icon" id="previewFile" title="Preview">👁</button>
+                                <button class="btn-icon danger" id="removeFile" title="Remove">✕</button>
+                            </div>
+                        </div>
+
+                        <!-- Import Options -->
+                        <div class="import-section">
+                            <div class="import-label">Or import from</div>
+                            <div class="import-options">
+                                <button class="import-btn" id="importHuggingFace">
+                                    <span class="icon">🤗</span>
+                                    HuggingFace
+                                </button>
+                                <button class="import-btn" id="importGoogleSheets">
+                                    <span class="icon">📊</span>
+                                    Sheets
+                                </button>
+                                <button class="import-btn" id="importURL">
+                                    <span class="icon">🔗</span>
+                                    URL
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Description -->
+                    <div class="upload-right">
+                        <div class="input-group">
+                            <label for="description">
+                                <span class="icon">💬</span>
+                                What do you want to train?
+                            </label>
+                            <textarea id="description" placeholder="Describe your training goal...
+
+Examples:
+• Classify customer support messages by intent
+• Detect sentiment in product reviews
+• Build a Q&A assistant for medical questions
+• Extract named entities from legal documents"></textarea>
+                            
+                            <!-- Smart Suggestions -->
+                            <div class="input-suggestions" id="suggestions">
+                                <!-- Populated by JS based on file content -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="input-group">
-                    <label for="description">What do you want to train?</label>
-                    <textarea id="description" placeholder="e.g., Classify customer support messages by intent, Build a Q&A assistant for medical questions..."></textarea>
+                <div class="action-bar">
+                    <button class="btn btn-primary btn-large" id="analyzeBtn" disabled>
+                        <span class="btn-text">Analyze Dataset →</span>
+                        <span class="btn-loader hidden"></span>
+                    </button>
                 </div>
-
-                <button class="btn btn-primary" id="analyzeBtn" disabled>
-                    <span class="btn-text">Analyze Dataset</span>
-                    <span class="btn-loader hidden"></span>
-                </button>
             </section>
 
             <!-- Step 2: Analysis Results -->
             <section class="card step-content" id="step2">
-                <h2>Dataset Analysis</h2>
+                <h2>📊 Dataset Analysis</h2>
+                <p class="subtitle">Here's what we found in your data</p>
                 
                 <div class="results-grid">
                     <div class="result-card">
@@ -119,7 +177,7 @@
                 <div class="button-group">
                     <button class="btn btn-secondary" id="backToUpload">← Back</button>
                     <button class="btn btn-primary" id="planBtn">
-                        <span class="btn-text">Run Planning Agent</span>
+                        <span class="btn-text">Run Planning Agent →</span>
                         <span class="btn-loader hidden"></span>
                     </button>
                 </div>
@@ -127,15 +185,16 @@
 
             <!-- Step 3: Planning Results -->
             <section class="card step-content" id="step3">
-                <h2>AI Planning Complete</h2>
+                <h2>🤖 AI Planning Complete</h2>
+                <p class="subtitle">Our AI has analyzed your data and created a training plan</p>
                 
                 <div class="plan-header">
                     <div class="plan-task">
-                        <span class="label">Task</span>
+                        <span class="label">Task Type</span>
                         <span class="value" id="planTask">-</span>
                     </div>
                     <div class="plan-model">
-                        <span class="label">Model</span>
+                        <span class="label">Base Model</span>
                         <span class="value" id="planModel">-</span>
                     </div>
                 </div>
@@ -158,13 +217,13 @@
                 </div>
             </section>
 
-            <!-- Step 4: Train -->
+            <!-- Step 4: Train - Side by Side -->
             <section class="card step-content" id="step4">
                 <h2>🚀 Start Training</h2>
                 <p class="subtitle">Choose how you want to train your model</p>
 
                 <div class="train-options">
-                    <!-- Cloud Training Option -->
+                    <!-- Cloud Training -->
                     <div class="train-option train-cloud">
                         <div class="train-option-icon">☁️</div>
                         <div class="train-option-content">
@@ -186,7 +245,7 @@
                         <span>OR</span>
                     </div>
 
-                    <!-- Local Training Option -->
+                    <!-- Local Training -->
                     <div class="train-option train-local">
                         <div class="train-option-icon">💻</div>
                         <div class="train-option-content">
@@ -215,6 +274,7 @@
                 <!-- Training in Progress -->
                 <div id="trainingProgress" class="hidden">
                     <h2>⚡ Training in Progress</h2>
+                    <p class="subtitle">Your model is being fine-tuned on GPU</p>
                     
                     <div class="training-status-card">
                         <div class="training-spinner"></div>
@@ -253,14 +313,10 @@
                                 <h4>Base Model</h4>
                                 <p class="model-name" id="baseModelName">-</p>
                             </div>
-                            <div class="card-metrics" id="baseMetrics">
-                                <!-- Base metrics inserted here -->
-                            </div>
+                            <div class="card-metrics" id="baseMetrics"></div>
                         </div>
                         
-                        <div class="comparison-arrow">
-                            <span>→</span>
-                        </div>
+                        <div class="comparison-arrow">→</div>
                         
                         <div class="comparison-card tuned-card">
                             <div class="card-header">
@@ -268,16 +324,12 @@
                                 <h4>Fine-tuned Model</h4>
                                 <p class="model-name">Your Custom Model</p>
                             </div>
-                            <div class="card-metrics" id="tunedMetrics">
-                                <!-- Fine-tuned metrics inserted here -->
-                            </div>
+                            <div class="card-metrics" id="tunedMetrics"></div>
                         </div>
                     </div>
 
                     <!-- Improvement Summary -->
-                    <div class="improvement-summary" id="improvementSummary">
-                        <!-- Improvement badges inserted here -->
-                    </div>
+                    <div class="improvement-summary" id="improvementSummary"></div>
 
                     <!-- Try It Out Section -->
                     <h3 class="section-title">🧪 Try It Out</h3>
@@ -311,7 +363,7 @@
                     </div>
                 </div>
 
-                <!-- Download Package (Local option) -->
+                <!-- Download Package (Local) -->
                 <div id="downloadPackage" class="hidden">
                     <h2>🎉 Package Ready!</h2>
                     
@@ -357,7 +409,6 @@
         </footer>
     </div>
 
-    <script src="/static/app.js?v=4"></script>
+    <script src="/static/app.js?v=6"></script>
 </body>
 </html>
-

@@ -11,13 +11,18 @@ let sessionId = null;
 let currentStep = 1;
 let jobId = null;
 let statusPollInterval = null;
+let uploadedFileData = null; // Store file data for preview
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const fileInfo = document.getElementById('fileInfo');
 const fileName = document.getElementById('fileName');
+const fileRows = document.getElementById('fileRows');
+const fileCols = document.getElementById('fileCols');
+const fileSize = document.getElementById('fileSize');
 const removeFile = document.getElementById('removeFile');
+const previewFile = document.getElementById('previewFile');
 const description = document.getElementById('description');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const planBtn = document.getElementById('planBtn');
@@ -30,6 +35,7 @@ const backToUpload = document.getElementById('backToUpload');
 const backToAnalysis = document.getElementById('backToAnalysis');
 const backToPlan = document.getElementById('backToPlan');
 const continueToTrainBtn = document.getElementById('continueToTrainBtn');
+const suggestions = document.getElementById('suggestions');
 
 // ============================================================================
 // STEP NAVIGATION
@@ -92,6 +98,33 @@ removeFile.addEventListener('click', (e) => {
     clearFile();
 });
 
+// Preview file button
+previewFile?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (uploadedFileData) {
+        showPreviewModal(uploadedFileData);
+    }
+});
+
+// Import buttons (placeholder functionality)
+document.getElementById('importHuggingFace')?.addEventListener('click', () => {
+    const datasetId = prompt('Enter HuggingFace dataset ID:\n\nExample: imdb, emotion, ag_news');
+    if (datasetId) {
+        alert(`🤗 HuggingFace import coming soon!\n\nDataset: ${datasetId}\n\nFor now, download the dataset and upload the CSV file.`);
+    }
+});
+
+document.getElementById('importGoogleSheets')?.addEventListener('click', () => {
+    alert('📊 Google Sheets import coming soon!\n\nFor now, export your sheet as CSV and upload it.');
+});
+
+document.getElementById('importURL')?.addEventListener('click', () => {
+    const url = prompt('Enter URL to CSV/JSON file:');
+    if (url) {
+        alert(`🔗 URL import coming soon!\n\nURL: ${url}\n\nFor now, download the file and upload it manually.`);
+    }
+});
+
 function handleFileSelect(file) {
     // Validate file type
     const validTypes = ['.csv', '.json', '.jsonl'];
@@ -102,8 +135,126 @@ function handleFileSelect(file) {
         return;
     }
     
+    // Parse file for preview before uploading
+    parseFileForPreview(file);
+    
     // Upload file
     uploadFile(file);
+}
+
+async function parseFileForPreview(file) {
+    try {
+        const text = await file.text();
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        let rows = 0;
+        let cols = 0;
+        let columns = [];
+        
+        if (ext === 'csv') {
+            const lines = text.trim().split('\n');
+            rows = lines.length - 1; // Exclude header
+            if (lines.length > 0) {
+                columns = lines[0].split(',').map(c => c.trim().replace(/"/g, ''));
+                cols = columns.length;
+            }
+        } else if (ext === 'json') {
+            const data = JSON.parse(text);
+            if (Array.isArray(data)) {
+                rows = data.length;
+                if (data.length > 0) {
+                    columns = Object.keys(data[0]);
+                    cols = columns.length;
+                }
+            }
+        } else if (ext === 'jsonl') {
+            const lines = text.trim().split('\n').filter(l => l.trim());
+            rows = lines.length;
+            if (lines.length > 0) {
+                const firstRow = JSON.parse(lines[0]);
+                columns = Object.keys(firstRow);
+                cols = columns.length;
+            }
+        }
+        
+        uploadedFileData = { rows, cols, columns, size: file.size, name: file.name };
+        
+        // Update file info display
+        fileRows.textContent = `✓ ${rows.toLocaleString()} rows`;
+        fileCols.textContent = `${cols} cols`;
+        fileSize.textContent = formatFileSize(file.size);
+        
+        // Generate smart suggestions based on columns
+        generateSuggestions(columns);
+        
+    } catch (error) {
+        console.error('Error parsing file for preview:', error);
+        uploadedFileData = { rows: '?', cols: '?', size: file.size, name: file.name };
+        fileRows.textContent = '✓ Uploaded';
+        fileCols.textContent = '';
+        fileSize.textContent = formatFileSize(file.size);
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function generateSuggestions(columns) {
+    if (!suggestions) return;
+    
+    const columnLower = columns.map(c => c.toLowerCase());
+    const suggestionsList = [];
+    
+    // Detect common patterns and suggest tasks
+    if (columnLower.some(c => c.includes('label') || c.includes('category') || c.includes('class') || c.includes('sentiment'))) {
+        if (columnLower.some(c => c.includes('text') || c.includes('review') || c.includes('comment') || c.includes('message'))) {
+            suggestionsList.push({ icon: '🏷️', text: 'Classify text by label/category' });
+        }
+    }
+    
+    if (columnLower.some(c => c.includes('intent') || c.includes('topic'))) {
+        suggestionsList.push({ icon: '💬', text: 'Classify by intent/topic' });
+    }
+    
+    if (columnLower.some(c => c.includes('sentiment') || c.includes('emotion'))) {
+        suggestionsList.push({ icon: '😊', text: 'Sentiment/emotion analysis' });
+    }
+    
+    if (columnLower.some(c => c.includes('question') || c.includes('instruction') || c.includes('prompt'))) {
+        if (columnLower.some(c => c.includes('answer') || c.includes('response') || c.includes('output'))) {
+            suggestionsList.push({ icon: '🤖', text: 'Build a Q&A assistant' });
+        }
+    }
+    
+    if (columnLower.some(c => c.includes('entity') || c.includes('ner') || c.includes('tag'))) {
+        suggestionsList.push({ icon: '🔍', text: 'Named entity recognition' });
+    }
+    
+    // Default suggestion if no patterns detected
+    if (suggestionsList.length === 0) {
+        suggestionsList.push({ icon: '💡', text: 'Classify or analyze this data' });
+    }
+    
+    // Render suggestions
+    suggestions.innerHTML = suggestionsList.map(s => `
+        <button class="suggestion-chip" onclick="useSuggestion('${s.text}')">
+            <span class="icon">${s.icon}</span>
+            ${s.text}
+        </button>
+    `).join('');
+}
+
+function useSuggestion(text) {
+    description.value = text;
+    updateAnalyzeButton();
+    description.focus();
+}
+
+function showPreviewModal(data) {
+    alert(`📄 File Preview\n\nName: ${data.name}\nRows: ${data.rows.toLocaleString()}\nColumns: ${data.cols}\nSize: ${formatFileSize(data.size)}\n\nColumns:\n${data.columns?.join(', ') || 'Unknown'}`);
 }
 
 async function uploadFile(file) {
@@ -158,9 +309,11 @@ async function uploadFile(file) {
 
 function clearFile() {
     sessionId = null;
+    uploadedFileData = null;
     fileInput.value = '';
     fileInfo.classList.add('hidden');
     dropZone.style.display = '';
+    if (suggestions) suggestions.innerHTML = '';
     updateAnalyzeButton();
 }
 
