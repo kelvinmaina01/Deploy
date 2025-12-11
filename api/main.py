@@ -197,6 +197,15 @@ async def root():
         return f.read()
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve the favicon."""
+    favicon_path = os.path.join(FRONTEND_DIR, "favicon.svg")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/svg+xml")
+    raise HTTPException(status_code=404)
+
+
 @app.get("/health")
 async def health():
     """Health check."""
