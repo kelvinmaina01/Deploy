@@ -178,15 +178,16 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
         finetuned_metrics = {k.replace("eval_", ""): v for k, v in finetuned_metrics.items()}
         print(f"[TuneKit] Fine-tuned model metrics: {finetuned_metrics}")
         
-        # Calculate improvement
+        # Calculate improvement (in percentage points, not relative %)
+        # Example: 51.7% -> 95.8% = +44.1 percentage points (not +85.5%)
         improvement = {}
         for key in ["accuracy", "f1"]:
             if key in base_metrics and key in finetuned_metrics:
-                base_val = base_metrics[key]
-                tuned_val = finetuned_metrics[key]
-                if base_val > 0:
-                    pct_change = ((tuned_val - base_val) / base_val) * 100
-                    improvement[key] = round(pct_change, 2)
+                base_val = base_metrics[key]  # Decimal (0-1)
+                tuned_val = finetuned_metrics[key]  # Decimal (0-1)
+                # Convert to percentage points difference
+                improvement_pp = (tuned_val - base_val) * 100
+                improvement[key] = round(improvement_pp, 1)
         
         print(f"[TuneKit] Training complete! Improvement: {improvement}")
         
@@ -560,6 +561,94 @@ def download_model_file(job_id: str, filename: str) -> bytes:
     
     with open(filepath, "rb") as f:
         return f.read()
+
+
+@app.function(
+    image=modal.Image.debian_slim(),
+    volumes={MODEL_DIR: model_volume},
+    timeout=120,
+)
+def generate_model_zip(job_id: str) -> bool:
+    """
+    Generate ZIP file for an existing model (for models trained before this feature).
+    Called once, then download_model_zip can use the pre-generated file.
+    """
+    import os
+    import zipfile
+    
+    model_path = f"{MODEL_DIR}/{job_id}"
+    zip_path = f"{model_path}/model.zip"
+    
+    if not os.path.exists(model_path):
+        print(f"[TuneKit] Model not found: {job_id}")
+        return False
+    
+    if os.path.exists(zip_path):
+        print(f"[TuneKit] ZIP already exists for {job_id}")
+        return True
+    
+    print(f"[TuneKit] Generating ZIP for existing model {job_id}...")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(model_path):
+            for file in files:
+                if file != "model.zip":
+                    filepath = os.path.join(root, file)
+                    arcname = os.path.relpath(filepath, model_path)
+                    zf.write(filepath, arcname)
+                    print(f"[TuneKit] Added: {arcname}")
+    
+    model_volume.commit()
+    print(f"[TuneKit] ZIP generated: {os.path.getsize(zip_path)} bytes")
+    return True
+
+
+@app.function(
+    image=modal.Image.debian_slim(),
+    volumes={MODEL_DIR: model_volume},
+    timeout=60,
+)
+def download_model_zip(job_id: str) -> bytes:
+    """
+    Return the pre-generated ZIP file (created during training).
+    FAST because ZIP was already created, just reading a file.
+    """
+    import os
+    
+    model_path = f"{MODEL_DIR}/{job_id}"
+    zip_path = f"{model_path}/model.zip"
+    
+    print(f"[TuneKit] Looking for pre-generated ZIP at: {zip_path}")
+    
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found: {job_id}")
+    
+    # Check for pre-generated ZIP (created during training)
+    if os.path.exists(zip_path):
+        print(f"[TuneKit] Found pre-generated ZIP, reading...")
+        with open(zip_path, "rb") as f:
+            zip_bytes = f.read()
+        print(f"[TuneKit] Read ZIP: {len(zip_bytes)} bytes")
+        return zip_bytes
+    
+    # Fallback: create ZIP on the fly (for older models without pre-generated ZIP)
+    print(f"[TuneKit] No pre-generated ZIP, creating on the fly...")
+    import zipfile
+    import io
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(model_path):
+            for filename in files:
+                filepath = os.path.join(root, filename)
+                arcname = os.path.relpath(filepath, model_path)
+                zip_file.write(filepath, arcname)
+    
+    zip_buffer.seek(0)
+    zip_bytes = zip_buffer.read()
+    print(f"[TuneKit] Created ZIP: {len(zip_bytes)} bytes")
+    
+    return zip_bytes
 
 
 # =============================================================================

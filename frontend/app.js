@@ -116,13 +116,23 @@ async function uploadFile(file) {
         const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
             body: formData,
+            // Don't set Content-Type header - browser will set it with boundary
         });
         
-        const data = await response.json();
-        
         if (!response.ok) {
-            throw new Error(data.detail || 'Upload failed');
+            // Try to parse error as JSON, fallback to text
+            let errorMsg = `HTTP ${response.status}: Upload failed`;
+            try {
+                const error = await response.json();
+                errorMsg = error.detail || error.message || errorMsg;
+            } catch {
+                const text = await response.text();
+                errorMsg = text || errorMsg;
+            }
+            throw new Error(errorMsg);
         }
+        
+        const data = await response.json();
         
         sessionId = data.session_id;
         
@@ -134,7 +144,13 @@ async function uploadFile(file) {
         updateAnalyzeButton();
         
     } catch (error) {
-        alert('Upload failed: ' + error.message);
+        console.error('Upload error:', error);
+        // Check if it's a network error
+        if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
+            alert('Upload failed: Cannot connect to server. Is the backend running on http://localhost:8000?');
+        } else {
+            alert('Upload failed: ' + error.message);
+        }
     } finally {
         setButtonLoading(analyzeBtn, false);
     }
@@ -497,7 +513,7 @@ function showTrainingComplete(data) {
     const finetunedMetrics = data.finetuned_metrics || data.metrics;
     renderMetrics(finetunedMetrics, 'tunedMetrics');
     
-    // Show improvement summary
+    // Show improvement summary (in percentage points)
     const improvementSummary = document.getElementById('improvementSummary');
     if (data.improvement) {
         let html = '';
@@ -505,10 +521,11 @@ function showTrainingComplete(data) {
             const isPositive = value > 0;
             const icon = isPositive ? '📈' : '📉';
             const sign = isPositive ? '+' : '';
+            // Value is already in percentage points (e.g., 44.1, not 0.441)
             html += `
                 <div class="improvement-badge ${isPositive ? '' : 'negative'}">
                     <span class="improvement-icon">${icon}</span>
-                    <span class="improvement-text">${key}: ${sign}${value.toFixed(1)}%</span>
+                    <span class="improvement-text">${key}: ${sign}${value.toFixed(1)} pp</span>
                 </div>
             `;
         });
@@ -525,38 +542,96 @@ function showTrainingComplete(data) {
     
     downloadModelBtn.onclick = async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         
         const originalText = downloadModelBtn.innerHTML;
-        downloadModelBtn.innerHTML = '⏳ Downloading...';
+        downloadModelBtn.innerHTML = '⏳ Preparing download... (may take 30-60s)';
+        downloadModelBtn.disabled = true;
         downloadModelBtn.style.pointerEvents = 'none';
         
+        // Show countdown with elapsed time
+        let countdown = 120; // 2 minutes max
+        const startTime = Date.now();
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            if (countdown > 0) {
+                downloadModelBtn.innerHTML = `⏳ Preparing download... (${elapsed}s elapsed)`;
+            } else {
+                downloadModelBtn.innerHTML = `⏳ Still preparing... (${elapsed}s)`;
+            }
+        }, 1000);
+        
         try {
+            const downloadStartTime = Date.now();
+            console.log('[Download] Starting download from:', downloadUrl);
+            console.log('[Download] Start time:', new Date().toLocaleTimeString());
+            
             const response = await fetch(downloadUrl);
+            const fetchTime = ((Date.now() - downloadStartTime) / 1000).toFixed(1);
+            console.log(`[Download] Response received in ${fetchTime}s - Status:`, response.status, response.statusText);
             
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Download failed');
+                let errorMsg = `HTTP ${response.status}: Download failed`;
+                try {
+                    const error = await response.json();
+                    errorMsg = error.detail || error.error || errorMsg;
+                } catch {
+                    try {
+                        errorMsg = await response.text() || errorMsg;
+                    } catch {
+                        errorMsg = `HTTP ${response.status}`;
+                    }
+                }
+                throw new Error(errorMsg);
             }
             
+            const contentType = response.headers.get('content-type');
+            console.log('[Download] Content-Type:', contentType);
+            
             const blob = await response.blob();
+            const totalTime = ((Date.now() - downloadStartTime) / 1000).toFixed(1);
+            console.log(`[Download] Blob received: ${blob.size} bytes`);
+            console.log(`[Download] Total time: ${totalTime}s`);
+            
+            if (blob.size === 0) {
+                throw new Error('Downloaded file is empty (0 bytes)');
+            }
+            
+            // Create download link
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
+            a.style.display = 'none';
             a.href = url;
             a.download = `tunekit_model_${jobId}.zip`;
             document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
             
-            downloadModelBtn.innerHTML = '✅ Downloaded!';
+            console.log('[Download] Triggering browser download...');
+            a.click();
+            
+            // Clean up after a delay
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                console.log('[Download] Cleanup complete');
+            }, 1000);
+            
+            clearInterval(countdownInterval);
+            const finalTime = ((Date.now() - downloadStartTime) / 1000).toFixed(1);
+            downloadModelBtn.innerHTML = `✅ Downloaded! (${finalTime}s)`;
+            console.log(`[Download] ✅ SUCCESS! Total time: ${finalTime}s`);
             setTimeout(() => {
                 downloadModelBtn.innerHTML = originalText;
+                downloadModelBtn.disabled = false;
                 downloadModelBtn.style.pointerEvents = 'auto';
-            }, 2000);
+            }, 3000);
             
         } catch (error) {
-            alert('Download failed: ' + error.message);
+            clearInterval(countdownInterval);
+            console.error('[Download] Error:', error);
+            alert('❌ Download failed: ' + error.message + '\n\nThe download may have timed out. Try again?');
             downloadModelBtn.innerHTML = originalText;
+            downloadModelBtn.disabled = false;
             downloadModelBtn.style.pointerEvents = 'auto';
         }
     };

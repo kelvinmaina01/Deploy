@@ -47,7 +47,8 @@ app = FastAPI(
 
 # CORS for frontend
 # In production, set ALLOWED_ORIGINS environment variable
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000")
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -587,45 +588,80 @@ async def download_model_file(job_id: str, filename: str):
 async def download_model_zip(job_id: str):
     """
     Download all model files as a ZIP archive.
+    Simple approach: Get file list from Modal, create ZIP here.
     """
-    import tempfile
-    import zipfile
     import io
+    import zipfile
     
-    # Get model info first
-    result = get_model_download_url(job_id)
+    print(f"[API] Download ZIP requested for job: {job_id}")
     
-    if result["status"] != "ready":
-        raise HTTPException(
-            status_code=400, 
-            detail=result.get("error", "Model not ready for download")
+    try:
+        # Get file list and content from Modal
+        result = get_model_download_url(job_id)
+        
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        
+        files = result.get("files", [])
+        if not files:
+            raise HTTPException(status_code=404, detail="No model files found")
+        
+        print(f"[API] Found {len(files)} files, creating ZIP...")
+        
+        # Create ZIP in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file_info in files:
+                filename = file_info.get("name") or file_info.get("filename")  # Support both formats
+                if not filename:
+                    print(f"[API] Skipping file with no name: {file_info}")
+                    continue
+                
+                # Skip checkpoint directories - users only need the final model
+                if filename.startswith("checkpoint-"):
+                    print(f"[API] Skipping checkpoint file: {filename}")
+                    continue
+                    
+                # Download each file content
+                from tunekit.training.modal_service import download_model_file_content
+                content = download_model_file_content(job_id, filename)
+                if content:
+                    zf.writestr(filename, content)
+                    print(f"[API] Added: {filename} ({len(content)} bytes)")
+                else:
+                    print(f"[API] Warning: Failed to download {filename}")
+        
+        zip_buffer.seek(0)
+        zip_bytes = zip_buffer.read()
+        print(f"[API] ZIP created: {len(zip_bytes)} bytes")
+        
+        from fastapi.responses import Response
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename=tunekit_model_{job_id}.zip",
+                "Content-Length": str(len(zip_bytes)),
+            }
         )
-    
-    files = result.get("files", [])
-    if not files:
-        raise HTTPException(status_code=404, detail="No model files found")
-    
-    # Create ZIP in memory
-    from tunekit.training.modal_service import download_model_file_content
-    
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for file_info in files:
-            filename = file_info["name"]
-            content = download_model_file_content(job_id, filename)
-            if content:
-                zip_file.writestr(filename, content)
-    
-    zip_buffer.seek(0)
-    
-    from fastapi.responses import StreamingResponse
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f"attachment; filename=tunekit_model_{job_id}.zip"
-        }
-    )
+        
+    except HTTPException:
+        raise
+    except KeyError as e:
+        print(f"[API] Missing key in file info: {e}")
+        print(f"[API] Files structure: {files[:2] if files else 'No files'}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Download failed: Invalid file structure - {str(e)}"
+        )
+    except Exception as e:
+        import traceback
+        print(f"[API] Error downloading ZIP: {e}")
+        print(f"[API] Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Download failed: {str(e)}"
+        )
 
 
 # ============================================================================
