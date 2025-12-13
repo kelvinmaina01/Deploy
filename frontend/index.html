@@ -15,16 +15,22 @@
         <!-- Header -->
         <header class="header">
             <div class="header-left">
-                <div class="logo">
+                <a href="/" class="logo" style="text-decoration: none;">
                     <span class="logo-icon">⚡</span>
                     <span class="logo-text">TuneKit</span>
-                </div>
+                </a>
                 <p class="tagline">Automated LLM Fine-Tuning Pipeline</p>
             </div>
-            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                <span class="icon-moon">🌙</span>
-                <span class="icon-sun">☀️</span>
-            </button>
+            <div class="header-right">
+                <div class="api-status" id="apiStatus" title="API Key Status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Keys</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                    <span class="icon-moon">🌙</span>
+                    <span class="icon-sun">☀️</span>
+                </button>
+            </div>
         </header>
 
         <!-- Progress Steps -->

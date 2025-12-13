@@ -1667,3 +1667,42 @@ initTheme();
 
 // Initialize step
 setStep(1);
+
+// ============================================================================
+// API KEY STATUS
+// ============================================================================
+
+function checkApiKeyStatus() {
+    const apiStatus = document.getElementById('apiStatus');
+    if (!apiStatus) return;
+    
+    const hasOpenAI = localStorage.getItem('tunekit_openai_key');
+    const hasModal = localStorage.getItem('tunekit_modal_key');
+    const hasModalSecret = localStorage.getItem('tunekit_modal_secret');
+    
+    const statusText = apiStatus.querySelector('.status-text');
+    
+    if (hasOpenAI && hasModal && hasModalSecret) {
+        apiStatus.classList.add('connected');
+        apiStatus.classList.remove('disconnected');
+        apiStatus.title = 'API keys configured. Click to manage.';
+        if (statusText) statusText.textContent = 'Connected';
+    } else if (hasOpenAI || hasModal) {
+        apiStatus.classList.remove('connected', 'disconnected');
+        apiStatus.title = 'Some API keys missing. Click to configure.';
+        if (statusText) statusText.textContent = 'Partial';
+    } else {
+        apiStatus.classList.add('disconnected');
+        apiStatus.classList.remove('connected');
+        apiStatus.title = 'No API keys configured. Click to set up.';
+        if (statusText) statusText.textContent = 'Setup';
+    }
+    
+    // Click to go to landing page for key management
+    apiStatus.addEventListener('click', () => {
+        window.location.href = '/#get-started';
+    });
+}
+
+// Check API key status on load
+checkApiKeyStatus();

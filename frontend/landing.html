@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TuneKit - Fine-Tune LLMs in Minutes</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/landing.css">
+</head>
+<body>
+    <!-- Subtle gradient background -->
+    <div class="bg-glow"></div>
+
+    <nav class="nav">
+        <a href="/" class="logo">
+            <span class="logo-icon">⚡</span>
+            <span>TuneKit</span>
+        </a>
+        <a href="/dashboard" class="nav-btn">Open Dashboard →</a>
+    </nav>
+
+    <main class="main">
+        <section class="hero">
+            <div class="badge">Open Source · GPU-Powered</div>
+            <h1>Fine-tune LLMs<br><span class="gradient">without the complexity</span></h1>
+            <p>Upload your data, describe what you want, and get a trained model.<br>TuneKit handles model selection, hyperparameters, and cloud training.</p>
+            <div class="hero-cta">
+                <a href="#setup" class="cta-primary">Get Started</a>
+                <a href="/dashboard" class="cta-secondary">View Dashboard</a>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <div class="feature-content">
+                    <h3>Smart data ingestion</h3>
+                    <p>Upload CSV, JSON, or JSONL. We auto-detect classification, NER, or instruction tuning.</p>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🧠</div>
+                <div class="feature-content">
+                    <h3>AI-powered planning</h3>
+                    <p>GPT-4 analyzes your data and selects the optimal model and configuration.</p>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">☁️</div>
+                <div class="feature-content">
+                    <h3>One-click cloud training</h3>
+                    <p>Train on Modal's T4/A10G GPUs. Watch metrics stream in real-time.</p>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📦</div>
+                <div class="feature-content">
+                    <h3>Production-ready output</h3>
+                    <p>Download your model with weights, tokenizer, and config — ready to deploy.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="setup" id="setup">
+            <div class="setup-card">
+                <div class="setup-header">
+                    <h2>Connect your API keys</h2>
+                    <p>Stored locally in your browser. Never sent to our servers.</p>
+                </div>
+                
+                <form class="form" id="apiKeyForm">
+                    <div class="field">
+                        <label for="openaiKey">OpenAI API Key</label>
+                        <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off">
+                        <span class="hint"><a href="https://platform.openai.com/api-keys" target="_blank">Get your key →</a></span>
+                    </div>
+                    
+                    <div class="field">
+                        <label for="modalKey">Modal Token ID</label>
+                        <input type="password" id="modalKey" placeholder="ak-..." autocomplete="off">
+                        <span class="hint"><a href="https://modal.com/settings" target="_blank">Get your token →</a></span>
+                    </div>
+                    
+                    <div class="field">
+                        <label for="modalSecret">Modal Token Secret</label>
+                        <input type="password" id="modalSecret" placeholder="as-..." autocomplete="off">
+                    </div>
+                    
+                    <div class="form-status" id="formStatus"></div>
+                    
+                    <button type="submit" class="submit">Save & Continue →</button>
+                </form>
+                
+                <p class="skip"><a href="/dashboard">Skip for now — explore the dashboard</a></p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>Built with LangGraph + FastAPI + Modal</span>
+        <a href="/dashboard">Dashboard</a>
+    </footer>
+
+    <script src="/static/landing.js"></script>
+</body>
+</html>

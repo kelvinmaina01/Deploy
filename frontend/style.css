@@ -239,6 +239,54 @@ body:has([data-theme="light"])::before {
     gap: 32px;
 }
 
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* API Status Indicator */
+.api-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.api-status:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-secondary);
+}
+
+.api-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--warning);
+}
+
+.api-status.connected .status-dot {
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.api-status.disconnected .status-dot {
+    background: var(--error);
+}
+
+.api-status .status-text {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 .logo {
     display: flex;
     align-items: center;

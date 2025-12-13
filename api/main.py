@@ -196,7 +196,15 @@ def create_empty_state(file_path: str, user_description: str = "") -> TuneKitSta
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the frontend."""
+    """Serve the landing page."""
+    landing_path = os.path.join(FRONTEND_DIR, "landing.html")
+    with open(landing_path, "r") as f:
+        return f.read()
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Serve the main dashboard/app."""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
     with open(index_path, "r") as f:
         return f.read()
