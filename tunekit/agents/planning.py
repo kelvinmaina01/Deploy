@@ -111,9 +111,12 @@ The following columns were detected in the dataset:
    - For NER: set text_column and tags_column
    - For instruction_tuning: set instruction_column and response_column
 
-3. **reasoning**: Explain your decisions in 3-4 sentences
-   - Why did you choose this task type?
-   - Why did you select these specific columns?"""
+3. **reasoning**: Write a clear, professional explanation (2-3 concise sentences)
+   - First sentence: State the chosen task type and why it matches the user's goal
+   - Second sentence: Identify the selected columns and their roles
+   - Optional third sentence: Note any important considerations (e.g., class balance, data quality)
+   - Be direct and technical - avoid filler words or repetition
+   - Example format: "Selected classification task based on user's goal to categorize text. Using 'text' column as input and 'label' column for categories. Dataset contains 2 balanced classes suitable for training." """
 
     # Call LLM
     structured_llm = llm.with_structured_output(AgentDecision)
