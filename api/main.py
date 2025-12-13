@@ -80,6 +80,10 @@ class AnalyzeRequest(BaseModel):
 
 class PlanRequest(BaseModel):
     session_id: str
+    # User can override detected columns
+    input_column: Optional[str] = None
+    output_column: Optional[str] = None
+    task_type: Optional[str] = None  # User can override task type too
 
 
 class GenerateRequest(BaseModel):
@@ -102,6 +106,7 @@ class AnalyzeResponse(BaseModel):
     task_confidence: float
     num_classes: Optional[int]
     column_candidates: dict
+    sample_rows: Optional[list[dict]] = None  # First 5 rows for preview
 
 
 class PlanResponse(BaseModel):
@@ -318,7 +323,61 @@ async def analyze(request: AnalyzeRequest):
         task_confidence=state["task_confidence"],
         num_classes=state.get("num_classes"),
         column_candidates=state["column_candidates"],
+        sample_rows=state.get("sample_rows", [])[:5],  # First 5 rows
     )
+
+
+@app.get("/sample-data/{session_id}")
+async def get_sample_data(session_id: str, limit: int = 100):
+    """
+    Get sample rows from the uploaded dataset.
+    
+    Args:
+        session_id: Session identifier
+        limit: Maximum number of rows to return (default: 100)
+    
+    Returns:
+        List of sample rows
+    """
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = sessions[session_id]
+    
+    # If we have state with raw_data, use it
+    if session.get("state") and session["state"].get("raw_data"):
+        raw_data = session["state"]["raw_data"]
+        return {
+            "rows": raw_data[:limit],
+            "total_rows": len(raw_data),
+            "returned_rows": min(limit, len(raw_data))
+        }
+    
+    # Otherwise, try to read from file
+    file_path = session["file_path"]
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        from tunekit.tools.ingest import ingest_data
+        from tunekit.state import create_empty_state
+        
+        # Quick ingest to get data
+        state = create_empty_state(file_path, "")
+        result = ingest_data(state)
+        state.update(result)
+        
+        if state.get("raw_data"):
+            raw_data = state["raw_data"]
+            return {
+                "rows": raw_data[:limit],
+                "total_rows": len(raw_data),
+                "returned_rows": min(limit, len(raw_data))
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Could not read file data")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading data: {str(e)}")
 
 
 @app.post("/plan", response_model=PlanResponse)
@@ -337,9 +396,84 @@ async def plan(request: PlanRequest):
     if not state:
         raise HTTPException(status_code=400, detail="Run /analyze first")
     
+    # Apply user overrides if provided
+    if request.input_column or request.output_column:
+        # User has configured columns - update column_candidates
+        column_candidates = state.get("column_candidates", {})
+        
+        if request.input_column:
+            # Update text_column for classification, instruction_column for instruction tuning
+            if "text_column" in column_candidates:
+                column_candidates["text_column"] = [request.input_column]
+            elif "instruction_column" in column_candidates:
+                column_candidates["instruction_column"] = [request.input_column]
+            else:
+                column_candidates["text_column"] = [request.input_column]
+        
+        if request.output_column:
+            # Update label_column for classification, tags_column for NER, response_column for instruction
+            if "label_column" in column_candidates:
+                column_candidates["label_column"] = [request.output_column]
+            elif "tags_column" in column_candidates:
+                column_candidates["tags_column"] = [request.output_column]
+            elif "response_column" in column_candidates:
+                column_candidates["response_column"] = [request.output_column]
+            else:
+                column_candidates["label_column"] = [request.output_column]
+        
+        state["column_candidates"] = column_candidates
+        print(f"[Plan] User overrides applied: input={request.input_column}, output={request.output_column}")
+    
+    if request.task_type:
+        # User explicitly changed task type
+        state["inferred_task_type"] = request.task_type
+        state["task_confidence"] = 1.0  # User override = full confidence
+        print(f"[Plan] User task type override: {request.task_type}")
+    
     # Run planning agent
     result = planning_agent(state)
     state.update(result)
+    
+    # IMPORTANT: Apply user overrides AFTER planning agent
+    # This ensures user's explicit choices take precedence over LLM decisions
+    user_override_applied = False
+    
+    if request.task_type:
+        state["final_task_type"] = request.task_type
+        user_override_applied = True
+        print(f"[Plan] User override: task_type = {request.task_type}")
+    
+    if request.input_column or request.output_column:
+        training_config = state.get("training_config", {})
+        
+        if request.input_column:
+            # Update the appropriate column in training config based on task type
+            task_type = state.get("final_task_type", "classification")
+            if task_type == "classification":
+                training_config["text_column"] = request.input_column
+            elif task_type == "ner":
+                training_config["text_column"] = request.input_column
+            elif task_type == "instruction_tuning":
+                training_config["instruction_column"] = request.input_column
+            print(f"[Plan] User override: input_column = {request.input_column}")
+        
+        if request.output_column:
+            task_type = state.get("final_task_type", "classification")
+            if task_type == "classification":
+                training_config["label_column"] = request.output_column
+            elif task_type == "ner":
+                training_config["tags_column"] = request.output_column
+            elif task_type == "instruction_tuning":
+                training_config["response_column"] = request.output_column
+            print(f"[Plan] User override: output_column = {request.output_column}")
+        
+        state["training_config"] = training_config
+        user_override_applied = True
+    
+    if user_override_applied:
+        # Update reasoning to reflect user overrides
+        original_reasoning = state.get("planning_reasoning", "")
+        state["planning_reasoning"] = f"{original_reasoning}\n\n[User Override Applied: Using manually configured columns/task type]"
     
     # Save updated state
     sessions[session_id]["state"] = state
