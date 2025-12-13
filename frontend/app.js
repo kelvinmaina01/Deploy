@@ -13,6 +13,13 @@ let jobId = null;
 let statusPollInterval = null;
 let uploadedFileData = null; // Store file data for preview
 
+// User configuration overrides (from Advanced Options)
+let userConfig = {
+    inputColumn: null,
+    outputColumn: null,
+    taskType: null
+};
+
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
@@ -25,14 +32,16 @@ const removeFile = document.getElementById('removeFile');
 const previewFile = document.getElementById('previewFile');
 const description = document.getElementById('description');
 const analyzeBtn = document.getElementById('analyzeBtn');
-const planBtn = document.getElementById('planBtn');
+const continueBtn = document.getElementById('continueBtn');
+const openAdvancedBtn = document.getElementById('openAdvancedBtn');
+const applyAdvancedBtn = document.getElementById('applyAdvancedBtn');
+const inlineAnalysis = document.getElementById('inlineAnalysis');
 const generateBtn = document.getElementById('generateBtn');
 const trainCloudBtn = document.getElementById('trainCloudBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const downloadModelBtn = document.getElementById('downloadModelBtn');
 const startOver = document.getElementById('startOver');
 const backToUpload = document.getElementById('backToUpload');
-const backToAnalysis = document.getElementById('backToAnalysis');
 const backToPlan = document.getElementById('backToPlan');
 const continueToTrainBtn = document.getElementById('continueToTrainBtn');
 const suggestions = document.getElementById('suggestions');
@@ -300,7 +309,7 @@ async function uploadFile(file) {
         if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
             alert('Upload failed: Cannot connect to server. Is the backend running on http://localhost:8000?');
         } else {
-            alert('Upload failed: ' + error.message);
+        alert('Upload failed: ' + error.message);
         }
     } finally {
         setButtonLoading(analyzeBtn, false);
@@ -327,6 +336,8 @@ description.addEventListener('input', updateAnalyzeButton);
 // ANALYZE
 // ============================================================================
 
+let analysisData = null; // Store analysis data for advanced options
+
 analyzeBtn.addEventListener('click', async () => {
     if (!sessionId || !description.value.trim()) return;
     
@@ -348,33 +359,27 @@ analyzeBtn.addEventListener('click', async () => {
             throw new Error(data.detail || 'Analysis failed');
         }
         
-        // Update UI
-        document.getElementById('numRows').textContent = data.num_rows.toLocaleString();
-        document.getElementById('numCols').textContent = data.columns.length;
-        document.getElementById('quality').textContent = (data.quality_score * 100).toFixed(0) + '%';
-        document.getElementById('taskType').textContent = formatTaskType(data.inferred_task_type);
+        analysisData = data;
         
-        // Columns
-        const columnsList = document.getElementById('columnsList');
-        columnsList.innerHTML = data.columns.map(col => 
-            `<span class="column-tag">${col}</span>`
-        ).join('');
-        
-        // Issues
-        const issuesList = document.getElementById('issuesList');
-        const issuesSection = document.getElementById('issuesSection');
-        
-        if (data.quality_issues && data.quality_issues.length > 0 && 
-            data.quality_issues[0] !== 'Data looks good!') {
-            issuesList.innerHTML = data.quality_issues.map(issue => 
-                `<li>${issue}</li>`
-            ).join('');
-            issuesSection.classList.remove('hidden');
-        } else {
-            issuesSection.classList.add('hidden');
+        // Store sample data for later use
+        if (data.sample_rows) {
+            analysisData.sample_rows = data.sample_rows;
         }
         
-        setStep(2);
+        // Populate Advanced Options
+        populateAdvancedOptions(data);
+        
+        // Build label color map from sample data
+        if (data.sample_rows && data.sample_rows.length > 0) {
+            buildLabelColorMap(data.sample_rows, data.columns);
+        }
+        
+        // Show inline analysis result (stay on step 1)
+        showInlineAnalysis(data);
+        
+        // Swap buttons: hide Analyze, show Continue
+        analyzeBtn.classList.add('hidden');
+        continueBtn.classList.remove('hidden');
         
     } catch (error) {
         alert('Analysis failed: ' + error.message);
@@ -383,18 +388,525 @@ analyzeBtn.addEventListener('click', async () => {
     }
 });
 
+// Show inline analysis result on Upload page
+function showInlineAnalysis(data) {
+    if (!inlineAnalysis) return;
+    
+    // Get detected columns from API's column_candidates
+    let inputCol = null;
+    let outputCol = null;
+    
+    // First try column_candidates from API (this is what the agent detects)
+    // For classification: text_column, label_column (arrays)
+    // For NER: text_column, tags_column
+    // For instruction: instruction_column, response_column
+    if (data.column_candidates) {
+        const candidates = data.column_candidates;
+        
+        // Get first item from arrays (API returns arrays of candidates)
+        if (candidates.text_column && candidates.text_column.length > 0) {
+            inputCol = candidates.text_column[0];
+        } else if (candidates.instruction_column && candidates.instruction_column.length > 0) {
+            inputCol = candidates.instruction_column[0];
+        }
+        
+        if (candidates.label_column && candidates.label_column.length > 0) {
+            outputCol = candidates.label_column[0];
+        } else if (candidates.tags_column && candidates.tags_column.length > 0) {
+            outputCol = candidates.tags_column[0];
+        } else if (candidates.response_column && candidates.response_column.length > 0) {
+            outputCol = candidates.response_column[0];
+        }
+    }
+    
+    // If still not found, use smart heuristics
+    if (!inputCol || !outputCol) {
+        const cols = data.columns || [];
+        const colsLower = cols.map(c => c.toLowerCase());
+        
+        // Common input column names
+        const inputPatterns = ['text', 'input', 'message', 'content', 'sentence', 'review', 'comment', 'body', 'question', 'email'];
+        // Common output column names  
+        const outputPatterns = ['label', 'category', 'class', 'target', 'output', 'sentiment', 'type', 'tag', 'spam'];
+        
+        // Find input column
+        if (!inputCol) {
+            for (const pattern of inputPatterns) {
+                const idx = colsLower.findIndex(c => c.includes(pattern));
+                if (idx !== -1) {
+                    inputCol = cols[idx];
+                    break;
+                }
+            }
+        }
+        
+        // Find output column
+        if (!outputCol) {
+            for (const pattern of outputPatterns) {
+                const idx = colsLower.findIndex(c => c.includes(pattern));
+                if (idx !== -1) {
+                    outputCol = cols[idx];
+                    break;
+                }
+            }
+        }
+        
+        // If still not found, look at sample data characteristics
+        if (!inputCol || !outputCol) {
+            if (data.sample_rows && data.sample_rows.length > 0) {
+                const firstRow = data.sample_rows[0];
+                for (const col of cols) {
+                    const value = firstRow[col];
+                    if (typeof value === 'string') {
+                        // Long text = likely input, short text = likely label
+                        if (value.length > 50 && !inputCol && !col.toLowerCase().includes('id')) {
+                            inputCol = col;
+                        } else if (value.length < 30 && !outputCol && !col.toLowerCase().includes('id') && !col.toLowerCase().includes('key')) {
+                            outputCol = col;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Final fallback - skip ID/key columns
+        const skipPatterns = ['id', 'key', 'index', 'idx', 'timestamp', 'date', 'time'];
+        if (!inputCol) {
+            inputCol = cols.find(c => !skipPatterns.some(p => c.toLowerCase().includes(p))) || cols[0];
+        }
+        if (!outputCol) {
+            outputCol = cols.find(c => c !== inputCol && !skipPatterns.some(p => c.toLowerCase().includes(p))) || cols[cols.length - 1];
+        }
+    }
+    
+    // Update inline display
+    document.getElementById('inlineTaskType').textContent = formatTaskType(data.inferred_task_type);
+    document.getElementById('inlineInputCol').textContent = inputCol || 'text';
+    document.getElementById('inlineOutputCol').textContent = outputCol || 'label';
+    
+    // Store detected columns for later use
+    data.detected_input_column = inputCol;
+    data.detected_output_column = outputCol;
+    
+    // Show the inline analysis card
+    inlineAnalysis.classList.remove('hidden');
+}
+
+// Toggle Advanced Options Modal
+const advancedModal = document.getElementById('advancedModal');
+const closeAdvancedModal = document.getElementById('closeAdvancedModal');
+
+// Open modal from Configure button on upload page
+openAdvancedBtn?.addEventListener('click', () => {
+    if (advancedModal) {
+        advancedModal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+});
+
+// Apply and close modal - SAVE user configuration
+applyAdvancedBtn?.addEventListener('click', () => {
+    if (advancedModal) {
+        // Get user's selected values
+        const inputCol = document.getElementById('inputColumnSelect')?.value || '';
+        const outputCol = document.getElementById('outputColumnSelect')?.value || '';
+        const taskName = document.getElementById('detectedTaskName')?.textContent || '';
+        
+        // Store in userConfig - these will be sent to the backend
+        userConfig.inputColumn = inputCol;
+        userConfig.outputColumn = outputCol;
+        // Task type is auto-detected, not user-configurable
+        // (Removed task type override - it's dangerous to let users change task type
+        // without understanding data format requirements)
+        userConfig.taskType = null;
+        
+        console.log('[Config] User configuration saved:', userConfig);
+        
+        // Update inline display
+        document.getElementById('inlineTaskType').textContent = taskName;
+        document.getElementById('inlineInputCol').textContent = inputCol;
+        document.getElementById('inlineOutputCol').textContent = outputCol;
+        
+        advancedModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+});
+
+closeAdvancedModal?.addEventListener('click', () => {
+    if (advancedModal) {
+        advancedModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+});
+
+// Close modal on overlay click
+advancedModal?.addEventListener('click', (e) => {
+    if (e.target === advancedModal) {
+        advancedModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && advancedModal && !advancedModal.classList.contains('hidden')) {
+        advancedModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+});
+
+function populateAdvancedOptions(data) {
+    // Task Detection Display
+    const detectedTaskName = document.getElementById('detectedTaskName');
+    
+    if (detectedTaskName) {
+        detectedTaskName.textContent = formatTaskType(data.inferred_task_type);
+    }
+    
+    // Build label color map from actual data
+    if (data.sample_rows && data.sample_rows.length > 0) {
+        buildLabelColorMap(data.sample_rows, data.columns);
+    }
+    
+    // Populate Column Selectors
+    const inputColumnSelect = document.getElementById('inputColumnSelect');
+    const outputColumnSelect = document.getElementById('outputColumnSelect');
+    
+    if (data.columns && inputColumnSelect && outputColumnSelect) {
+        // Use column_candidates from API first (more accurate)
+        let guessedInput = null;
+        let guessedOutput = null;
+        
+        if (data.column_candidates) {
+            const candidates = data.column_candidates;
+            if (candidates.text_column && candidates.text_column.length > 0) {
+                guessedInput = candidates.text_column[0];
+            } else if (candidates.instruction_column && candidates.instruction_column.length > 0) {
+                guessedInput = candidates.instruction_column[0];
+            }
+            
+            if (candidates.label_column && candidates.label_column.length > 0) {
+                guessedOutput = candidates.label_column[0];
+            } else if (candidates.tags_column && candidates.tags_column.length > 0) {
+                guessedOutput = candidates.tags_column[0];
+            } else if (candidates.response_column && candidates.response_column.length > 0) {
+                guessedOutput = candidates.response_column[0];
+            }
+        }
+        
+        // Fallback: pattern matching if API didn't provide candidates
+        if (!guessedInput) {
+            guessedInput = data.columns.find(col => {
+                const colLower = col.toLowerCase();
+                return colLower.includes('text') || colLower.includes('content') || 
+                       colLower.includes('message') || colLower.includes('review') ||
+                       colLower.includes('question') || colLower.includes('input') ||
+                       colLower.includes('email') || colLower.includes('body');
+            }) || data.columns[0];
+        }
+        
+        if (!guessedOutput) {
+            guessedOutput = data.columns.find(col => {
+                const colLower = col.toLowerCase();
+                return colLower.includes('label') || colLower.includes('category') ||
+                       colLower.includes('class') || colLower.includes('sentiment') ||
+                       colLower.includes('target') || colLower.includes('output') ||
+                       colLower.includes('spam') || colLower.includes('type');
+            }) || data.columns[data.columns.length - 1];
+        }
+        
+        // Populate selectors
+        inputColumnSelect.innerHTML = data.columns.map(col => 
+            `<option value="${col}" ${col === guessedInput ? 'selected' : ''}>${col}</option>`
+        ).join('');
+        
+        outputColumnSelect.innerHTML = data.columns.map(col => 
+            `<option value="${col}" ${col === guessedOutput ? 'selected' : ''}>${col}</option>`
+        ).join('');
+        
+        // Refresh sample data when columns change
+        inputColumnSelect.addEventListener('change', fetchSampleData);
+        outputColumnSelect.addEventListener('change', fetchSampleData);
+    }
+    
+    // Task type is auto-detected and not user-changeable
+    // (Removed task type dropdown - changing task type without proper data format is dangerous)
+    
+    // Quality Checks
+    const qualityChecks = document.getElementById('qualityChecks');
+    if (qualityChecks) {
+        const checks = [];
+        
+        if (data.quality_score >= 0.8) {
+            checks.push({ type: 'pass', text: 'Data quality is good' });
+        }
+        
+        if (data.quality_issues && data.quality_issues.length > 0) {
+            data.quality_issues.forEach(issue => {
+                if (issue === 'Data looks good!') {
+                    checks.push({ type: 'pass', text: 'No quality issues detected' });
+                } else {
+                    checks.push({ type: 'warn', text: issue });
+                }
+            });
+        } else {
+            checks.push({ type: 'pass', text: 'No missing values detected' });
+            checks.push({ type: 'pass', text: 'No duplicate rows found' });
+        }
+        
+        qualityChecks.innerHTML = checks.map(check => `
+            <div class="quality-check check-${check.type}">${check.text}</div>
+        `).join('');
+    }
+    
+    // Fetch and display sample data
+    fetchSampleData();
+}
+
+async function fetchSampleData() {
+    const dataPreview = document.getElementById('dataPreview');
+    if (!dataPreview || !sessionId) return;
+    
+    try {
+        // Get currently selected columns
+        const inputColSelect = document.getElementById('inputColumnSelect');
+        const outputColSelect = document.getElementById('outputColumnSelect');
+        
+        if (!inputColSelect || !outputColSelect) {
+            dataPreview.innerHTML = '<div class="preview-placeholder">Loading...</div>';
+            return;
+        }
+        
+        const inputCol = inputColSelect.value;
+        const outputCol = outputColSelect.value;
+        
+        // Use real sample data from analysis response
+        if (analysisData && analysisData.sample_rows && analysisData.sample_rows.length > 0) {
+            const sampleData = analysisData.sample_rows.slice(0, 5); // First 5 rows
+            
+            // Rebuild color map when columns change
+            buildLabelColorMap(analysisData.sample_rows, analysisData.columns);
+            
+            dataPreview.innerHTML = `
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th>${inputCol}</th>
+                            <th>${outputCol}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sampleData.map(row => {
+                            const inputValue = row[inputCol] || row[inputCol.toLowerCase()] || '-';
+                            const outputValue = row[outputCol] || row[outputCol.toLowerCase()] || '-';
+                            return `
+                                <tr>
+                                    <td>${String(inputValue).substring(0, 100)}${String(inputValue).length > 100 ? '...' : ''}</td>
+                                    <td>${formatLabelPill(String(outputValue))}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+                <p style="text-align: right; color: var(--text-muted); font-size: 13px; margin-top: 12px;">
+                    <a href="#" class="view-all-rows" data-session="${sessionId}" style="color: var(--accent-secondary); text-decoration: none; cursor: pointer;">
+                        View All ${analysisData.num_rows?.toLocaleString() || uploadedFileData?.rows?.toLocaleString() || '1,247'} Rows →
+                    </a>
+                </p>
+            `;
+            
+            // Add click handler for "View All Rows"
+            setTimeout(() => {
+                const viewAllLink = dataPreview.querySelector('.view-all-rows');
+                if (viewAllLink) {
+                    viewAllLink.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        await showAllRows(sessionId, inputCol, outputCol);
+                    });
+                }
+            }, 100);
+        } else if (uploadedFileData && uploadedFileData.columns) {
+            // Fallback: show placeholder if no sample data available
+            dataPreview.innerHTML = `
+                <div class="preview-placeholder">
+                    Sample data will appear here once analysis is complete.
+                </div>
+            `;
+        } else {
+            dataPreview.innerHTML = '<div class="preview-placeholder">Upload a file to see preview</div>';
+        }
+    } catch (error) {
+        console.error('Error fetching sample data:', error);
+        dataPreview.innerHTML = '<div class="preview-placeholder">Unable to load sample data</div>';
+    }
+}
+
+// Label color mapping - dynamically assigned
+let labelColorMap = {};
+
+function buildLabelColorMap(sampleRows, columns) {
+    if (!sampleRows || sampleRows.length === 0 || !columns || columns.length === 0) {
+        return;
+    }
+    
+    // Get the currently selected output column
+    const outputColSelect = document.getElementById('outputColumnSelect');
+    const outputCol = outputColSelect ? outputColSelect.value : (columns[columns.length - 1]);
+    
+    // Collect unique labels from the output column
+    const uniqueLabels = new Set();
+    
+    for (const row of sampleRows) {
+        const value = row[outputCol] || row[outputCol.toLowerCase()];
+        if (value !== null && value !== undefined) {
+            const labelStr = String(value).trim();
+            if (labelStr && labelStr.length < 100) { // Reasonable label length
+                uniqueLabels.add(labelStr);
+            }
+        }
+    }
+    
+    // Only assign colors if we have a reasonable number of unique labels (classification task)
+    if (uniqueLabels.size > 0 && uniqueLabels.size <= 50) {
+        // Color palette - 8 distinct colors that cycle
+        const colorPalette = [
+            { bg: 'rgba(124, 58, 237, 0.2)', color: '#a78bfa', border: 'rgba(124, 58, 237, 0.3)' }, // purple
+            { bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.3)' }, // blue
+            { bg: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: 'rgba(16, 185, 129, 0.3)' }, // green
+            { bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' }, // yellow
+            { bg: 'rgba(236, 72, 153, 0.2)', color: '#ec4899', border: 'rgba(236, 72, 153, 0.3)' }, // pink
+            { bg: 'rgba(6, 182, 212, 0.2)', color: '#06b6d4', border: 'rgba(6, 182, 212, 0.3)' }, // cyan
+            { bg: 'rgba(249, 115, 22, 0.2)', color: '#f97316', border: 'rgba(249, 115, 22, 0.3)' }, // orange
+            { bg: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.3)' }, // red
+        ];
+        
+        // Sort labels for consistent color assignment
+        const sortedLabels = Array.from(uniqueLabels).sort();
+        labelColorMap = {};
+        
+        sortedLabels.forEach((label, index) => {
+            const color = colorPalette[index % colorPalette.length];
+            labelColorMap[label.toLowerCase()] = color;
+        });
+    }
+}
+
+function formatLabelPill(label) {
+    if (!label) return '<span class="label-pill default">-</span>';
+    
+    const labelStr = String(label).trim();
+    const labelKey = labelStr.toLowerCase();
+    
+    // Check if we have a color for this label
+    if (labelColorMap[labelKey]) {
+        const color = labelColorMap[labelKey];
+        return `<span class="label-pill" style="background: ${color.bg}; color: ${color.color}; border: 1px solid ${color.border};">${labelStr}</span>`;
+    }
+    
+    // Default styling
+    return `<span class="label-pill default">${labelStr}</span>`;
+}
+
+async function showAllRows(sessionId, inputCol, outputCol) {
+    const dataPreview = document.getElementById('dataPreview');
+    if (!dataPreview || !sessionId) return;
+    
+    try {
+        // Show loading state
+        const originalContent = dataPreview.innerHTML;
+        dataPreview.innerHTML = '<div class="preview-placeholder">Loading all rows...</div>';
+        
+        // Fetch all rows from API
+        const response = await fetch(`${API_URL}/sample-data/${sessionId}?limit=600`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch rows');
+        }
+        
+        const data = await response.json();
+        const allRows = data.rows || [];
+        const totalRows = data.total_rows || allRows.length;
+        
+        // Rebuild color map from all rows to ensure all labels have colors
+        if (allRows.length > 0) {
+            const outputColSelect = document.getElementById('outputColumnSelect');
+            const columns = outputColSelect ? Array.from(outputColSelect.options).map(opt => opt.value) : [outputCol];
+            buildLabelColorMap(allRows, columns);
+        }
+        
+        // Create scrollable table with all rows
+        dataPreview.innerHTML = `
+            <div class="all-rows-container">
+                <div class="all-rows-header">
+                    <span>Showing ${allRows.length.toLocaleString()} of ${totalRows.toLocaleString()} rows</span>
+                    <button class="btn-close-preview" id="showLessBtn">Show Less</button>
+                </div>
+                <div class="all-rows-scroll">
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>${inputCol}</th>
+                                <th>${outputCol}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allRows.map(row => {
+                                const inputValue = row[inputCol] || row[inputCol.toLowerCase()] || '-';
+                                const outputValue = row[outputCol] || row[outputCol.toLowerCase()] || '-';
+                                return `
+                                    <tr>
+                                        <td>${String(inputValue).substring(0, 200)}${String(inputValue).length > 200 ? '...' : ''}</td>
+                                        <td>${formatLabelPill(String(outputValue))}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        // Add click handler for "Show Less" button
+        const showLessBtn = document.getElementById('showLessBtn');
+        if (showLessBtn) {
+            showLessBtn.addEventListener('click', () => {
+                fetchSampleData(); // Reload the 5-row preview
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading all rows:', error);
+        dataPreview.innerHTML = '<div class="preview-placeholder">Unable to load all rows. Please try again.</div>';
+    }
+}
+
 // ============================================================================
-// PLAN
+// PLAN (Continue button from Upload page)
 // ============================================================================
 
-planBtn.addEventListener('click', async () => {
+continueBtn?.addEventListener('click', async () => {
     try {
-        setButtonLoading(planBtn, true);
+        setButtonLoading(continueBtn, true);
+        
+        // Build request with user configuration if set
+        const planRequest = { session_id: sessionId };
+        
+        // Include user overrides if they configured via Advanced Options
+        if (userConfig.inputColumn) {
+            planRequest.input_column = userConfig.inputColumn;
+        }
+        if (userConfig.outputColumn) {
+            planRequest.output_column = userConfig.outputColumn;
+        }
+        if (userConfig.taskType) {
+            planRequest.task_type = userConfig.taskType;
+        }
+        
+        console.log('[Plan] Sending request with config:', planRequest);
         
         const response = await fetch(`${API_URL}/plan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId }),
+            body: JSON.stringify(planRequest),
         });
         
         const data = await response.json();
@@ -403,53 +915,154 @@ planBtn.addEventListener('click', async () => {
             throw new Error(data.detail || 'Planning failed');
         }
         
-        // Update UI
-        document.getElementById('planTask').textContent = formatTaskType(data.final_task_type);
-        document.getElementById('planModel').textContent = data.base_model;
-        document.getElementById('planReasoning').textContent = data.reasoning;
+        // Update new Plan UI
+        updatePlanUI(data);
         
-        // Config grid
-        const configGrid = document.getElementById('configGrid');
-        const configItems = [
-            ['Learning Rate', data.training_config.learning_rate],
-            ['Batch Size', data.training_config.batch_size],
-            ['Epochs', data.training_config.num_epochs],
-            ['Max Length', data.training_config.max_length],
-        ];
-        
-        if (data.training_config.num_labels) {
-            configItems.push(['Num Labels', data.training_config.num_labels]);
-        }
-        
-        if (data.training_config.use_qlora) {
-            configItems.push(['Method', 'QLoRA']);
-            configItems.push(['LoRA Rank', data.training_config.lora_r]);
-        } else {
-            configItems.push(['Method', 'Full Fine-tune']);
-        }
-        
-        configGrid.innerHTML = configItems.map(([key, value]) => `
-            <div class="config-item">
-                <span class="key">${key}</span>
-                <span class="value">${value}</span>
-            </div>
-        `).join('');
-        
-        setStep(3);
+        setStep(2); // Now Plan is step 2
         
     } catch (error) {
         alert('Planning failed: ' + error.message);
     } finally {
-        setButtonLoading(planBtn, false);
+        setButtonLoading(continueBtn, false);
     }
 });
 
 // ============================================================================
-// CONTINUE TO TRAIN (Step 3 -> Step 4)
+// UPDATE PLAN UI
+// ============================================================================
+
+function updatePlanUI(data) {
+    const config = data.training_config || {};
+    const numRows = analysisData?.num_rows || 1000;
+    
+    // Top Info Grid
+    document.getElementById('planTask').textContent = formatTaskType(data.final_task_type);
+    document.getElementById('planClasses').textContent = config.num_labels ? `${config.num_labels} classes` : '';
+    
+    const modelName = data.base_model || 'distilbert-base-uncased';
+    document.getElementById('planModel').textContent = modelName.split('/').pop();
+    document.getElementById('planConfidence').textContent = `${Math.round((data.task_confidence || 0.9) * 100)}% confidence`;
+    
+    const strategy = config.use_qlora ? 'QLoRA' : 'Full Fine-tune';
+    document.getElementById('planStrategy').textContent = strategy;
+    const strategyMeta = [];
+    if (config.use_class_weights) strategyMeta.push('Class Weights');
+    if (config.use_early_stopping) strategyMeta.push('Early Stopping');
+    document.getElementById('planStrategyMeta').textContent = strategyMeta.length > 0 ? strategyMeta.join(', ') : '';
+    
+    // Calculate training time (more realistic estimates)
+    const epochs = config.num_epochs || 3;
+    const batchSize = config.batch_size || 32;
+    const stepsPerEpoch = Math.ceil(numRows * 0.8 / batchSize);
+    const totalSteps = stepsPerEpoch * epochs;
+    
+    // Model-specific time per step (seconds)
+    // distilbert: ~0.3-0.5s, bert-base: ~0.5-0.8s, roberta: ~0.6-1.0s
+    let secondsPerStep = 0.5; // Default
+    if (modelName.includes('distilbert')) {
+        secondsPerStep = 0.4;
+    } else if (modelName.includes('roberta') || modelName.includes('bert-large')) {
+        secondsPerStep = 0.7;
+    } else if (modelName.includes('bert-base')) {
+        secondsPerStep = 0.6;
+    }
+    
+    const trainSeconds = Math.ceil(totalSteps * secondsPerStep);
+    const trainMinutes = Math.max(1, Math.ceil(trainSeconds / 60));
+    
+    // Add buffer for validation and overhead (validation is ~20% slower)
+    const valSteps = Math.ceil(numRows * 0.1 / batchSize) * epochs;
+    const valSeconds = Math.ceil(valSteps * secondsPerStep * 1.2);
+    const valMinutes = Math.ceil(valSeconds / 60);
+    
+    // Total with overhead
+    const totalMinutes = trainMinutes + valMinutes + 1; // +1 for load/save
+    
+    // Show range for more honesty
+    const minTime = Math.max(1, Math.floor(totalMinutes * 0.7));
+    const maxTime = Math.ceil(totalMinutes * 1.5);
+    
+    document.getElementById('trainTime').textContent = `(~${trainMinutes}-${trainMinutes + valMinutes} min)`;
+    document.getElementById('totalTime').textContent = `~${minTime}-${maxTime} minutes`;
+    
+    // Config Grid
+    const configGrid = document.getElementById('configGrid');
+    const configItems = [
+        ['Model', modelName.split('/').pop()],
+        ['Learning Rate', config.learning_rate || '2e-5'],
+        ['Batch Size', config.batch_size || '32'],
+        ['Epochs', config.num_epochs || '3'],
+        ['Max Length', config.max_length || '128'],
+    ];
+    
+    if (config.num_labels) {
+        configItems.push(['Num Labels', config.num_labels]);
+    }
+    
+    configGrid.innerHTML = configItems.map(([key, value]) => `
+        <div class="config-item-simple">
+            <span class="key">${key}</span>
+            <span class="value">${value}</span>
+        </div>
+    `).join('');
+    
+    // Reasoning (preview and full) - Format for readability
+    const reasoning = data.reasoning || 'Analysis complete. Ready to train.';
+    const formattedReasoning = formatReasoningText(reasoning);
+    
+    // For preview, strip HTML and truncate plain text
+    const plainText = reasoning.replace(/<[^>]*>/g, '');
+    const previewText = plainText.length > 200 ? plainText.substring(0, 200) + '...' : plainText;
+    
+    document.getElementById('planReasoning').textContent = previewText;
+    document.getElementById('planReasoningFull').innerHTML = formattedReasoning;
+    
+    // Setup reasoning modal handlers
+    setupReasoningModal();
+}
+
+// Track if modal handlers are already set up
+let reasoningModalSetup = false;
+
+function setupReasoningModal() {
+    if (reasoningModalSetup) return; // Already set up
+    
+    const viewBtn = document.getElementById('viewReasoningBtn');
+    const modal = document.getElementById('reasoningModal');
+    const closeBtn = document.getElementById('closeReasoningBtn');
+    
+    if (!viewBtn || !modal || !closeBtn) return;
+    
+    viewBtn.addEventListener('click', () => {
+        modal.classList.remove('hidden');
+    });
+    
+    closeBtn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+    });
+    
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.add('hidden');
+        }
+    });
+    
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            modal.classList.add('hidden');
+        }
+    });
+    
+    reasoningModalSetup = true;
+}
+
+// ============================================================================
+// CONTINUE TO TRAIN (Step 2 -> Step 3)
 // ============================================================================
 
 continueToTrainBtn.addEventListener('click', () => {
-    setStep(4);
+    setStep(3); // Train is now step 3
 });
 
 // ============================================================================
@@ -476,7 +1089,7 @@ trainCloudBtn.addEventListener('click', async () => {
         
         // Show training progress
         showTrainingProgress(data);
-        setStep(5);
+        setStep(4); // Training/Done is now step 4
         
         // Start polling for status
         startStatusPolling();
@@ -889,7 +1502,7 @@ generateBtn.addEventListener('click', async () => {
         // Update download link
         downloadBtn.href = `${API_URL}${data.download_url}`;
         
-        setStep(5);
+        setStep(4); // Done is now step 4
         
     } catch (error) {
         alert('Generation failed: ' + error.message);
@@ -902,9 +1515,16 @@ generateBtn.addEventListener('click', async () => {
 // NAVIGATION
 // ============================================================================
 
-backToUpload.addEventListener('click', () => setStep(1));
-backToAnalysis.addEventListener('click', () => setStep(2));
-backToPlan.addEventListener('click', () => setStep(3));
+backToUpload.addEventListener('click', () => {
+    // Reset inline analysis state when going back to upload
+    if (inlineAnalysis) inlineAnalysis.classList.add('hidden');
+    analyzeBtn.classList.remove('hidden');
+    continueBtn.classList.add('hidden');
+    // Reset user configuration so fresh analysis is used
+    userConfig = { inputColumn: null, outputColumn: null, taskType: null };
+    setStep(1);
+});
+backToPlan.addEventListener('click', () => setStep(2)); // Plan is now step 2
 
 startOver.addEventListener('click', () => {
     sessionId = null;
@@ -913,7 +1533,15 @@ startOver.addEventListener('click', () => {
     clearFile();
     description.value = '';
     
-    // Reset step 5 views
+    // Reset user configuration
+    userConfig = { inputColumn: null, outputColumn: null, taskType: null };
+    
+    // Reset inline analysis
+    if (inlineAnalysis) inlineAnalysis.classList.add('hidden');
+    analyzeBtn.classList.remove('hidden');
+    continueBtn.classList.add('hidden');
+    
+    // Reset step 4 views
     document.getElementById('trainingProgress').classList.add('hidden');
     document.getElementById('trainingComplete').classList.add('hidden');
     document.getElementById('downloadPackage').classList.add('hidden');
@@ -939,6 +1567,36 @@ function setButtonLoading(btn, loading) {
         if (text) text.style.opacity = '1';
         if (loader) loader.classList.add('hidden');
     }
+}
+
+function formatReasoningText(text) {
+    if (!text) return '<p>Analysis complete. Ready to train.</p>';
+    
+    // Split into sentences
+    const sentences = text.match(/[^\.!?]+[\.!?]+/g) || [text];
+    
+    // Group sentences into logical paragraphs (2-3 sentences each)
+    const paragraphs = [];
+    let currentPara = [];
+    
+    sentences.forEach((sentence, index) => {
+        sentence = sentence.trim();
+        if (!sentence) return;
+        
+        currentPara.push(sentence);
+        
+        // Start new paragraph every 2-3 sentences, or on topic shifts
+        const isTopicShift = /(?:The|This|These|Based on|For|In|Using|Selected)/i.test(sentence);
+        const shouldBreak = currentPara.length >= 2 && (isTopicShift || currentPara.length >= 3);
+        
+        if (shouldBreak || index === sentences.length - 1) {
+            paragraphs.push(currentPara.join(' '));
+            currentPara = [];
+        }
+    });
+    
+    // Format paragraphs - clean and simple, no aggressive highlighting
+    return paragraphs.map(para => `<p>${para}</p>`).join('');
 }
 
 function formatTaskType(type) {
@@ -969,5 +1627,43 @@ function formatDuration(seconds) {
     return `${mins}m ${secs}s`;
 }
 
-// Initialize
+// ============================================================================
+// THEME TOGGLE
+// ============================================================================
+
+const themeToggle = document.getElementById('themeToggle');
+
+function initTheme() {
+    // Check for saved preference or system preference
+    const savedTheme = localStorage.getItem('tunekit-theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    } else if (!systemPrefersDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('tunekit-theme', newTheme);
+}
+
+themeToggle?.addEventListener('click', toggleTheme);
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('tunekit-theme')) {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme
+initTheme();
+
+// Initialize step
 setStep(1);

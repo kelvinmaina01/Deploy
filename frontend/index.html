@@ -21,6 +21,10 @@
                 </div>
                 <p class="tagline">Automated LLM Fine-Tuning Pipeline</p>
             </div>
+            <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                <span class="icon-moon">🌙</span>
+                <span class="icon-sun">☀️</span>
+            </button>
         </header>
 
         <!-- Progress Steps -->
@@ -32,21 +36,16 @@
             <div class="step-line"></div>
             <div class="step" data-step="2">
                 <div class="step-number"><span>2</span></div>
-                <div class="step-label">Analyze</div>
+                <div class="step-label">Plan</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="3">
                 <div class="step-number"><span>3</span></div>
-                <div class="step-label">Plan</div>
+                <div class="step-label">Train</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="4">
                 <div class="step-number"><span>4</span></div>
-                <div class="step-label">Train</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="5">
-                <div class="step-number"><span>5</span></div>
                 <div class="step-label">Done</div>
             </div>
         </div>
@@ -132,93 +131,211 @@ Examples:
                     </div>
                 </div>
 
+                <!-- Inline Analysis Result (shown after analysis) -->
+                <div class="inline-analysis hidden" id="inlineAnalysis">
+                    <div class="analysis-ready">
+                        <div class="ready-icon">✓</div>
+                        <div class="ready-content">
+                            <div class="ready-title">Analysis Complete</div>
+                            <div class="ready-details">
+                                <span class="ready-task" id="inlineTaskType">Text Classification</span>
+                                <span class="ready-separator">•</span>
+                                <span class="ready-columns">
+                                    Using <span id="inlineInputCol" class="col-name">text</span> → <span id="inlineOutputCol" class="col-name">label</span>
+                                </span>
+                            </div>
+                        </div>
+                        <button class="btn btn-ghost btn-config" id="openAdvancedBtn">
+                            ⚙️ Configure
+                        </button>
+                    </div>
+                </div>
+
                 <div class="action-bar">
                     <button class="btn btn-primary btn-large" id="analyzeBtn" disabled>
                         <span class="btn-text">Analyze Dataset →</span>
                         <span class="btn-loader hidden"></span>
                     </button>
-                </div>
-            </section>
-
-            <!-- Step 2: Analysis Results -->
-            <section class="card step-content" id="step2">
-                <h2>📊 Dataset Analysis</h2>
-                <p class="subtitle">Here's what we found in your data</p>
-                
-                <div class="results-grid">
-                    <div class="result-card">
-                        <div class="result-label">Rows</div>
-                        <div class="result-value" id="numRows">-</div>
-                    </div>
-                    <div class="result-card">
-                        <div class="result-label">Columns</div>
-                        <div class="result-value" id="numCols">-</div>
-                    </div>
-                    <div class="result-card">
-                        <div class="result-label">Quality</div>
-                        <div class="result-value" id="quality">-</div>
-                    </div>
-                    <div class="result-card">
-                        <div class="result-label">Task Type</div>
-                        <div class="result-value" id="taskType">-</div>
-                    </div>
-                </div>
-
-                <div class="detail-section">
-                    <h3>Detected Columns</h3>
-                    <div class="columns-list" id="columnsList"></div>
-                </div>
-
-                <div class="detail-section" id="issuesSection">
-                    <h3>Quality Issues</h3>
-                    <ul class="issues-list" id="issuesList"></ul>
-                </div>
-
-                <div class="button-group">
-                    <button class="btn btn-secondary" id="backToUpload">← Back</button>
-                    <button class="btn btn-primary" id="planBtn">
-                        <span class="btn-text">Run Planning Agent →</span>
+                    <button class="btn btn-primary btn-large hidden" id="continueBtn">
+                        <span class="btn-text">Continue to Planning →</span>
                         <span class="btn-loader hidden"></span>
                     </button>
                 </div>
+
+                <!-- Advanced Options Modal - Full Screen (moved here from Step 2) -->
+                <div class="modal-overlay hidden" id="advancedModal">
+                    <div class="modal-container">
+                        <div class="modal-header">
+                            <h2>⚙️ Advanced Configuration</h2>
+                            <button class="modal-close" id="closeAdvancedModal">✕</button>
+                        </div>
+                        <div class="modal-content" id="advancedOptions">
+                            <div class="advanced-header">
+                                <h3>⚙️ Advanced Configuration</h3>
+                                <p>Fine-tune how your data is processed</p>
+                            </div>
+
+                            <!-- Detected Task Section -->
+                            <div class="config-section task-detection">
+                                <div class="task-detection-header">
+                                    <h4>🎯 DETECTED TASK</h4>
+                                </div>
+                                <div class="task-display">
+                                    <div class="task-icon">🎯</div>
+                                    <div class="task-info">
+                                        <div class="task-name" id="detectedTaskName">Text Classification</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Task type is auto-detected based on data structure -->
+                                <p class="task-note">Task type is automatically detected based on your data structure and cannot be changed manually.</p>
+
+                                <!-- Input/Output Columns -->
+                                <div class="column-mapping">
+                                    <div class="column-mapping-item">
+                                        <label>Input Column</label>
+                                        <div class="column-selector">
+                                            <select class="column-select" id="inputColumnSelect">
+                                                <!-- Populated by JS -->
+                                            </select>
+                                            <div class="column-hint">e.g., Product review content</div>
+                                        </div>
+                                    </div>
+                                    <div class="column-arrow">→</div>
+                                    <div class="column-mapping-item">
+                                        <label>Output Column</label>
+                                        <div class="column-selector">
+                                            <select class="column-select" id="outputColumnSelect">
+                                                <!-- Populated by JS -->
+                                            </select>
+                                            <div class="column-hint">e.g., Positive, Negative, Neutral</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Data Quality -->
+                            <div class="config-section" id="issuesSection">
+                                <div class="config-section-header">
+                                    <h4>✅ Data Quality</h4>
+                                </div>
+                                <div class="quality-checks" id="qualityChecks">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Sample Data Preview -->
+                            <div class="config-section">
+                                <div class="config-section-header">
+                                    <h4>👁️ Sample Data</h4>
+                                    <span class="config-hint">First 5 rows from your dataset</span>
+                                </div>
+                                <div class="data-preview" id="dataPreview">
+                                    <div class="preview-placeholder">Loading sample data...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-primary" id="applyAdvancedBtn">Apply & Close</button>
+                        </div>
+                    </div>
+                </div>
             </section>
 
-            <!-- Step 3: Planning Results -->
-            <section class="card step-content" id="step3">
-                <h2>🤖 AI Planning Complete</h2>
-                <p class="subtitle">Our AI has analyzed your data and created a training plan</p>
+            <!-- Step 2: Planning Results -->
+            <section class="card step-content" id="step2">
+                <h2>Planning Complete</h2>
+                <p class="subtitle">Our AI has analyzed your data and created a training plan. Here's what I recommend:</p>
                 
-                <div class="plan-header">
-                    <div class="plan-task">
-                        <span class="label">Task Type</span>
-                        <span class="value" id="planTask">-</span>
+                <!-- Main Info Grid -->
+                <div class="plan-info-grid">
+                    <div class="plan-info-item">
+                        <span class="info-label">Task Type</span>
+                        <span class="info-value" id="planTask">-</span>
+                        <span class="info-meta" id="planClasses"></span>
                     </div>
-                    <div class="plan-model">
-                        <span class="label">Base Model</span>
-                        <span class="value" id="planModel">-</span>
+                    <div class="plan-info-item">
+                        <span class="info-label">Base Model</span>
+                        <span class="info-value" id="planModel">-</span>
+                        <span class="info-meta" id="planConfidence"></span>
+                    </div>
+                    <div class="plan-info-item">
+                        <span class="info-label">Strategy</span>
+                        <span class="info-value" id="planStrategy">-</span>
+                        <span class="info-meta" id="planStrategyMeta"></span>
                     </div>
                 </div>
 
-                <div class="detail-section">
-                    <h3>Agent Reasoning</h3>
-                    <p class="reasoning" id="planReasoning"></p>
+                <!-- What Happens Next -->
+                <div class="plan-section">
+                    <h3>What Happens Next</h3>
+                    <div class="timeline-simple">
+                        <div class="timeline-item">
+                            <div class="timeline-number">1</div>
+                            <div class="timeline-text">
+                                <strong>Load Model <span class="time-est">(~30s)</span></strong>
+                                <p>Download pre-trained model and initialize weights</p>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-number">2</div>
+                            <div class="timeline-text">
+                                <strong>Train on Your Data <span class="time-est" id="trainTime">(~3 min)</span></strong>
+                                <p>Fine-tune the model using your specific dataset</p>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-number">3</div>
+                            <div class="timeline-text">
+                                <strong>Validate & Save <span class="time-est">(~20s)</span></strong>
+                                <p>Run evaluation checks and save the refined model</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="timeline-summary">
+                        <strong>Total estimated time: <span id="totalTime">~4 minutes</span></strong>
+                        <p class="timeline-note">Time may vary based on GPU availability and dataset size</p>
+                    </div>
                 </div>
 
-                <div class="detail-section">
+                <!-- Training Configuration -->
+                <div class="plan-section">
                     <h3>Training Configuration</h3>
-                    <div class="config-grid" id="configGrid"></div>
+                    <div class="config-grid-simple" id="configGrid">
+                        <!-- Populated by JS -->
+                    </div>
                 </div>
 
-                <div class="button-group">
-                    <button class="btn btn-secondary" id="backToAnalysis">← Back</button>
-                    <button class="btn btn-primary" id="continueToTrainBtn">
-                        Continue to Training →
+                <!-- Agent Reasoning -->
+                <div class="plan-section">
+                    <div class="reasoning-header">
+                        <h3>Agent Reasoning</h3>
+                        <button class="btn btn-ghost btn-sm" id="viewReasoningBtn">View Full</button>
+                    </div>
+                    <p class="reasoning-preview" id="planReasoning"></p>
+                </div>
+
+                <!-- Reasoning Modal (hidden by default) -->
+                <div class="reasoning-modal hidden" id="reasoningModal">
+                    <div class="reasoning-modal-content">
+                        <div class="reasoning-modal-header">
+                            <h3>🧠 Agent Reasoning</h3>
+                            <button class="modal-close" id="closeReasoningBtn">✕</button>
+                        </div>
+                        <div class="reasoning-text" id="planReasoningFull"></div>
+                    </div>
+                </div>
+
+                <div class="button-group plan-actions">
+                    <button class="btn btn-secondary" id="backToUpload">← Back to Upload</button>
+                    <button class="btn btn-primary btn-large" id="continueToTrainBtn">
+                        Start Training →
                     </button>
                 </div>
             </section>
 
-            <!-- Step 4: Train - Side by Side -->
-            <section class="card step-content" id="step4">
+            <!-- Step 3: Train - Side by Side -->
+            <section class="card step-content" id="step3">
                 <h2>🚀 Start Training</h2>
                 <p class="subtitle">Choose how you want to train your model</p>
 
@@ -269,8 +386,8 @@ Examples:
                 </div>
             </section>
 
-            <!-- Step 5: Training Status / Complete -->
-            <section class="card step-content" id="step5">
+            <!-- Step 4: Training Status / Complete -->
+            <section class="card step-content" id="step4">
                 <!-- Training in Progress -->
                 <div id="trainingProgress" class="hidden">
                     <h2>⚡ Training in Progress</h2>
@@ -409,6 +526,6 @@ Examples:
         </footer>
     </div>
 
-    <script src="/static/app.js?v=6"></script>
+    <script src="/static/app.js?v=24"></script>
 </body>
 </html>
