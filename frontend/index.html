@@ -3,248 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TuneKit - Automated Fine-Tuning</title>
+    <title>TuneKit - Fine-Tune AI Models</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <div class="header-left">
-                <a href="/" class="logo" style="text-decoration: none;">
-                    <span class="logo-icon">⚡</span>
+            <div class="header-center">
+                <a href="/" class="logo">
                     <span class="logo-text">TuneKit</span>
                 </a>
-                <p class="tagline">Automated LLM Fine-Tuning Pipeline</p>
-            </div>
-            <div class="header-right">
-                <div class="api-status" id="apiStatus" title="API Key Status">
-                    <span class="status-dot"></span>
-                    <span class="status-text">Keys</span>
-                </div>
-                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                    <span class="icon-moon">🌙</span>
-                    <span class="icon-sun">☀️</span>
-                </button>
+                <p class="tagline">Fine-Tune AI Models in Minutes</p>
             </div>
         </header>
 
-        <!-- Progress Steps -->
-        <div class="progress-bar">
-            <div class="step active" data-step="1">
-                <div class="step-number"><span>1</span></div>
-                <div class="step-label">Upload</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="2">
-                <div class="step-number"><span>2</span></div>
-                <div class="step-label">Plan</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="3">
-                <div class="step-number"><span>3</span></div>
-                <div class="step-label">Train</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="4">
-                <div class="step-number"><span>4</span></div>
-                <div class="step-label">Done</div>
-            </div>
-        </div>
-
         <!-- Main Content -->
         <main class="main">
-            <!-- Step 1: Upload - Split Layout -->
+            <!-- Step 1: Upload Dataset -->
             <section class="card step-content active" id="step1">
-                <h2>📤 Upload Your Dataset</h2>
-                <p class="subtitle">Supported formats: CSV, JSON, JSONL</p>
+                <h2>📤 Upload Training Data</h2>
                 
-                <div class="upload-layout">
-                    <!-- Left Panel: Upload Zone -->
-                    <div class="upload-left">
-                        <div class="upload-zone" id="dropZone">
-                            <span class="upload-icon">📁</span>
-                            <p>Drag & drop your file here</p>
-                            <p class="formats">or click to browse</p>
-                            <span class="or">or</span>
-                            <label class="btn btn-secondary">
-                                Browse Files
-                                <input type="file" id="fileInput" accept=".csv,.json,.jsonl" hidden>
-                            </label>
-                        </div>
-                        
-                        <!-- File Info -->
-                        <div class="file-info hidden" id="fileInfo">
-                            <div class="file-icon">📄</div>
-                            <div class="file-details">
-                                <div class="file-name" id="fileName"></div>
-                                <div class="file-meta">
-                                    <span class="success" id="fileRows">✓ -- rows</span>
-                                    <span id="fileCols">-- cols</span>
-                                    <span id="fileSize">-- KB</span>
-                                </div>
-                            </div>
-                            <div class="file-actions">
-                                <button class="btn-icon" id="previewFile" title="Preview">👁</button>
-                                <button class="btn-icon danger" id="removeFile" title="Remove">✕</button>
-                            </div>
-                        </div>
-
-                        <!-- Import Options -->
-                        <div class="import-section">
-                            <div class="import-label">Or import from</div>
-                            <div class="import-options">
-                                <button class="import-btn" id="importHuggingFace">
-                                    <span class="icon">🤗</span>
-                                    HuggingFace
-                                </button>
-                                <button class="import-btn" id="importGoogleSheets">
-                                    <span class="icon">📊</span>
-                                    Sheets
-                                </button>
-                                <button class="import-btn" id="importURL">
-                                    <span class="icon">🔗</span>
-                                    URL
-                                </button>
-                            </div>
-                        </div>
+                <div class="upload-section">
+                    <!-- Drop Zone -->
+                    <div class="upload-zone" id="dropZone">
+                        <p class="upload-main">Drop JSONL file here</p>
+                        <p class="upload-sub">or click to browse</p>
+                        <p class="upload-formats">Accepted: .jsonl, .json, .parquet</p>
+                        <input type="file" id="fileInput" accept=".jsonl,.json,.parquet" hidden>
                     </div>
-
-                    <!-- Right Panel: Description -->
-                    <div class="upload-right">
-                        <div class="input-group">
-                            <label for="description">
-                                <span class="icon">💬</span>
-                                What do you want to train?
-                            </label>
-                            <textarea id="description" placeholder="Describe your training goal...
-
-Examples:
-• Classify customer support messages by intent
-• Detect sentiment in product reviews
-• Build a Q&A assistant for medical questions
-• Extract named entities from legal documents"></textarea>
-                            
-                            <!-- Smart Suggestions -->
-                            <div class="input-suggestions" id="suggestions">
-                                <!-- Populated by JS based on file content -->
+                    
+                    <!-- File Info (shown after upload) -->
+                    <div class="file-info hidden" id="fileInfo">
+                        <div class="file-icon">📄</div>
+                        <div class="file-details">
+                            <div class="file-name" id="fileName"></div>
+                            <div class="file-meta">
+                                <span class="success" id="fileRows">✓ -- examples</span>
+                                <span id="fileSize">-- KB</span>
                             </div>
                         </div>
+                        <button class="btn-icon danger" id="removeFile" title="Remove">✕</button>
                     </div>
                 </div>
 
-                <!-- Inline Analysis Result (shown after analysis) -->
-                <div class="inline-analysis hidden" id="inlineAnalysis">
-                    <div class="analysis-ready">
-                        <div class="ready-icon">✓</div>
-                        <div class="ready-content">
-                            <div class="ready-title">Analysis Complete</div>
-                            <div class="ready-details">
-                                <span class="ready-task" id="inlineTaskType">Text Classification</span>
-                                <span class="ready-separator">•</span>
-                                <span class="ready-columns">
-                                    Using <span id="inlineInputCol" class="col-name">text</span> → <span id="inlineOutputCol" class="col-name">label</span>
-                                </span>
-                            </div>
-                        </div>
-                        <button class="btn btn-ghost btn-config" id="openAdvancedBtn">
-                            ⚙️ Configure
-                        </button>
+                <!-- Help Section -->
+                <div class="help-section">
+                    <div class="help-row">
+                        <span class="help-icon">ℹ️</span>
+                        <span>Need help formatting your data?</span>
+                    </div>
+                    <div class="help-row">
+                        <span class="help-icon">📥</span>
+                        <a href="#" id="downloadExamples">Download example datasets</a>
                     </div>
                 </div>
 
+                <!-- Example Datasets -->
+                <div class="examples-section">
+                    <p class="examples-label">Examples:</p>
+                    <ul class="examples-list">
+                        <li><a href="#" class="example-link" data-example="sentiment">Sentiment classification (100 samples)</a></li>
+                        <li><a href="#" class="example-link" data-example="qa">Question answering (100 samples)</a></li>
+                        <li><a href="#" class="example-link" data-example="instructions">Custom instructions (100 samples)</a></li>
+                    </ul>
+                </div>
+
+                <!-- Format Requirements Link -->
+                <div class="format-link">
+                    <a href="#" id="viewFormatRequirements">📖 View format requirements →</a>
+                </div>
+
+                <!-- Requirements Section -->
+                <div class="requirements-section" id="requirementsSection">
+                    <p class="requirements-title">Requirements:</p>
+                    <ul class="requirements-list">
+                        <li>✓ JSONL format with "messages" structure</li>
+                        <li>✓ Minimum 50 examples (100-1000 recommended)</li>
+                        <li>✓ Each message needs "role" and "content"</li>
+                    </ul>
+                </div>
+
+                <!-- Continue Button -->
                 <div class="action-bar">
-                    <button class="btn btn-primary btn-large" id="analyzeBtn" disabled>
-                        <span class="btn-text">Analyze Dataset →</span>
+                    <button class="btn btn-primary btn-large" id="continueBtn" disabled>
+                        <span class="btn-text">Continue →</span>
                         <span class="btn-loader hidden"></span>
                     </button>
-                    <button class="btn btn-primary btn-large hidden" id="continueBtn">
-                        <span class="btn-text">Continue to Planning →</span>
-                        <span class="btn-loader hidden"></span>
-                    </button>
-                </div>
-
-                <!-- Advanced Options Modal - Full Screen (moved here from Step 2) -->
-                <div class="modal-overlay hidden" id="advancedModal">
-                    <div class="modal-container">
-                        <div class="modal-header">
-                            <h2>⚙️ Advanced Configuration</h2>
-                            <button class="modal-close" id="closeAdvancedModal">✕</button>
-                        </div>
-                        <div class="modal-content" id="advancedOptions">
-                            <div class="advanced-header">
-                                <h3>⚙️ Advanced Configuration</h3>
-                                <p>Fine-tune how your data is processed</p>
-                            </div>
-
-                            <!-- Detected Task Section -->
-                            <div class="config-section task-detection">
-                                <div class="task-detection-header">
-                                    <h4>🎯 DETECTED TASK</h4>
-                                </div>
-                                <div class="task-display">
-                                    <div class="task-icon">🎯</div>
-                                    <div class="task-info">
-                                        <div class="task-name" id="detectedTaskName">Text Classification</div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Task type is auto-detected based on data structure -->
-                                <p class="task-note">Task type is automatically detected based on your data structure and cannot be changed manually.</p>
-
-                                <!-- Input/Output Columns -->
-                                <div class="column-mapping">
-                                    <div class="column-mapping-item">
-                                        <label>Input Column</label>
-                                        <div class="column-selector">
-                                            <select class="column-select" id="inputColumnSelect">
-                                                <!-- Populated by JS -->
-                                            </select>
-                                            <div class="column-hint">e.g., Product review content</div>
-                                        </div>
-                                    </div>
-                                    <div class="column-arrow">→</div>
-                                    <div class="column-mapping-item">
-                                        <label>Output Column</label>
-                                        <div class="column-selector">
-                                            <select class="column-select" id="outputColumnSelect">
-                                                <!-- Populated by JS -->
-                                            </select>
-                                            <div class="column-hint">e.g., Positive, Negative, Neutral</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Data Quality -->
-                            <div class="config-section" id="issuesSection">
-                                <div class="config-section-header">
-                                    <h4>✅ Data Quality</h4>
-                                </div>
-                                <div class="quality-checks" id="qualityChecks">
-                                    <!-- Populated by JS -->
-                                </div>
-                            </div>
-
-                            <!-- Sample Data Preview -->
-                            <div class="config-section">
-                                <div class="config-section-header">
-                                    <h4>👁️ Sample Data</h4>
-                                    <span class="config-hint">First 5 rows from your dataset</span>
-                                </div>
-                                <div class="data-preview" id="dataPreview">
-                                    <div class="preview-placeholder">Loading sample data...</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-primary" id="applyAdvancedBtn">Apply & Close</button>
-                        </div>
-                    </div>
                 </div>
             </section>
 
@@ -532,6 +381,6 @@ Examples:
         </footer>
     </div>
 
-    <script src="/static/app.js?v=24"></script>
+    <script src="/static/app.js?v=25"></script>
 </body>
 </html>

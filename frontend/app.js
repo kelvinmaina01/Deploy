@@ -26,16 +26,9 @@ const fileInput = document.getElementById('fileInput');
 const fileInfo = document.getElementById('fileInfo');
 const fileName = document.getElementById('fileName');
 const fileRows = document.getElementById('fileRows');
-const fileCols = document.getElementById('fileCols');
 const fileSize = document.getElementById('fileSize');
 const removeFile = document.getElementById('removeFile');
-const previewFile = document.getElementById('previewFile');
-const description = document.getElementById('description');
-const analyzeBtn = document.getElementById('analyzeBtn');
 const continueBtn = document.getElementById('continueBtn');
-const openAdvancedBtn = document.getElementById('openAdvancedBtn');
-const applyAdvancedBtn = document.getElementById('applyAdvancedBtn');
-const inlineAnalysis = document.getElementById('inlineAnalysis');
 const generateBtn = document.getElementById('generateBtn');
 const trainCloudBtn = document.getElementById('trainCloudBtn');
 const downloadBtn = document.getElementById('downloadBtn');
@@ -44,7 +37,6 @@ const startOver = document.getElementById('startOver');
 const backToUpload = document.getElementById('backToUpload');
 const backToPlan = document.getElementById('backToPlan');
 const continueToTrainBtn = document.getElementById('continueToTrainBtn');
-const suggestions = document.getElementById('suggestions');
 
 // ============================================================================
 // STEP NAVIGATION
@@ -107,102 +99,18 @@ removeFile.addEventListener('click', (e) => {
     clearFile();
 });
 
-// Preview file button
-previewFile?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (uploadedFileData) {
-        showPreviewModal(uploadedFileData);
-    }
-});
-
-// Import buttons (placeholder functionality)
-document.getElementById('importHuggingFace')?.addEventListener('click', () => {
-    const datasetId = prompt('Enter HuggingFace dataset ID:\n\nExample: imdb, emotion, ag_news');
-    if (datasetId) {
-        alert(`🤗 HuggingFace import coming soon!\n\nDataset: ${datasetId}\n\nFor now, download the dataset and upload the CSV file.`);
-    }
-});
-
-document.getElementById('importGoogleSheets')?.addEventListener('click', () => {
-    alert('📊 Google Sheets import coming soon!\n\nFor now, export your sheet as CSV and upload it.');
-});
-
-document.getElementById('importURL')?.addEventListener('click', () => {
-    const url = prompt('Enter URL to CSV/JSON file:');
-    if (url) {
-        alert(`🔗 URL import coming soon!\n\nURL: ${url}\n\nFor now, download the file and upload it manually.`);
-    }
-});
-
 function handleFileSelect(file) {
     // Validate file type
-    const validTypes = ['.csv', '.json', '.jsonl'];
+    const validTypes = ['.jsonl', '.json', '.parquet'];
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     
     if (!validTypes.includes(ext)) {
-        alert('Please upload a CSV, JSON, or JSONL file');
+        alert('Please upload a JSONL, JSON, or Parquet file');
         return;
     }
     
-    // Parse file for preview before uploading
-    parseFileForPreview(file);
-    
     // Upload file
     uploadFile(file);
-}
-
-async function parseFileForPreview(file) {
-    try {
-        const text = await file.text();
-        const ext = file.name.split('.').pop().toLowerCase();
-        
-        let rows = 0;
-        let cols = 0;
-        let columns = [];
-        
-        if (ext === 'csv') {
-            const lines = text.trim().split('\n');
-            rows = lines.length - 1; // Exclude header
-            if (lines.length > 0) {
-                columns = lines[0].split(',').map(c => c.trim().replace(/"/g, ''));
-                cols = columns.length;
-            }
-        } else if (ext === 'json') {
-            const data = JSON.parse(text);
-            if (Array.isArray(data)) {
-                rows = data.length;
-                if (data.length > 0) {
-                    columns = Object.keys(data[0]);
-                    cols = columns.length;
-                }
-            }
-        } else if (ext === 'jsonl') {
-            const lines = text.trim().split('\n').filter(l => l.trim());
-            rows = lines.length;
-            if (lines.length > 0) {
-                const firstRow = JSON.parse(lines[0]);
-                columns = Object.keys(firstRow);
-                cols = columns.length;
-            }
-        }
-        
-        uploadedFileData = { rows, cols, columns, size: file.size, name: file.name };
-        
-        // Update file info display
-        fileRows.textContent = `✓ ${rows.toLocaleString()} rows`;
-        fileCols.textContent = `${cols} cols`;
-        fileSize.textContent = formatFileSize(file.size);
-        
-        // Generate smart suggestions based on columns
-        generateSuggestions(columns);
-        
-    } catch (error) {
-        console.error('Error parsing file for preview:', error);
-        uploadedFileData = { rows: '?', cols: '?', size: file.size, name: file.name };
-        fileRows.textContent = '✓ Uploaded';
-        fileCols.textContent = '';
-        fileSize.textContent = formatFileSize(file.size);
-    }
 }
 
 function formatFileSize(bytes) {
@@ -211,76 +119,17 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function generateSuggestions(columns) {
-    if (!suggestions) return;
-    
-    const columnLower = columns.map(c => c.toLowerCase());
-    const suggestionsList = [];
-    
-    // Detect common patterns and suggest tasks
-    if (columnLower.some(c => c.includes('label') || c.includes('category') || c.includes('class') || c.includes('sentiment'))) {
-        if (columnLower.some(c => c.includes('text') || c.includes('review') || c.includes('comment') || c.includes('message'))) {
-            suggestionsList.push({ icon: '🏷️', text: 'Classify text by label/category' });
-        }
-    }
-    
-    if (columnLower.some(c => c.includes('intent') || c.includes('topic'))) {
-        suggestionsList.push({ icon: '💬', text: 'Classify by intent/topic' });
-    }
-    
-    if (columnLower.some(c => c.includes('sentiment') || c.includes('emotion'))) {
-        suggestionsList.push({ icon: '😊', text: 'Sentiment/emotion analysis' });
-    }
-    
-    if (columnLower.some(c => c.includes('question') || c.includes('instruction') || c.includes('prompt'))) {
-        if (columnLower.some(c => c.includes('answer') || c.includes('response') || c.includes('output'))) {
-            suggestionsList.push({ icon: '🤖', text: 'Build a Q&A assistant' });
-        }
-    }
-    
-    if (columnLower.some(c => c.includes('entity') || c.includes('ner') || c.includes('tag'))) {
-        suggestionsList.push({ icon: '🔍', text: 'Named entity recognition' });
-    }
-    
-    // Default suggestion if no patterns detected
-    if (suggestionsList.length === 0) {
-        suggestionsList.push({ icon: '💡', text: 'Classify or analyze this data' });
-    }
-    
-    // Render suggestions
-    suggestions.innerHTML = suggestionsList.map(s => `
-        <button class="suggestion-chip" onclick="useSuggestion('${s.text}')">
-            <span class="icon">${s.icon}</span>
-            ${s.text}
-        </button>
-    `).join('');
-}
-
-function useSuggestion(text) {
-    description.value = text;
-    updateAnalyzeButton();
-    description.focus();
-}
-
-function showPreviewModal(data) {
-    alert(`📄 File Preview\n\nName: ${data.name}\nRows: ${data.rows.toLocaleString()}\nColumns: ${data.cols}\nSize: ${formatFileSize(data.size)}\n\nColumns:\n${data.columns?.join(', ') || 'Unknown'}`);
-}
-
 async function uploadFile(file) {
     const formData = new FormData();
     formData.append('file', file);
     
     try {
-        setButtonLoading(analyzeBtn, true);
-        
         const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
             body: formData,
-            // Don't set Content-Type header - browser will set it with boundary
         });
         
         if (!response.ok) {
-            // Try to parse error as JSON, fallback to text
             let errorMsg = `HTTP ${response.status}: Upload failed`;
             try {
                 const error = await response.json();
@@ -293,26 +142,25 @@ async function uploadFile(file) {
         }
         
         const data = await response.json();
-        
         sessionId = data.session_id;
         
         // Show file info
         fileName.textContent = file.name;
+        fileRows.textContent = `✓ ${data.rows?.toLocaleString() || ''} examples`;
+        fileSize.textContent = formatFileSize(file.size);
         fileInfo.classList.remove('hidden');
         dropZone.style.display = 'none';
         
-        updateAnalyzeButton();
+        // Enable continue button
+        updateContinueButton();
         
     } catch (error) {
         console.error('Upload error:', error);
-        // Check if it's a network error
         if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
             alert('Upload failed: Cannot connect to server. Is the backend running on http://localhost:8000?');
         } else {
-        alert('Upload failed: ' + error.message);
+            alert('Upload failed: ' + error.message);
         }
-    } finally {
-        setButtonLoading(analyzeBtn, false);
     }
 }
 
@@ -322,175 +170,22 @@ function clearFile() {
     fileInput.value = '';
     fileInfo.classList.add('hidden');
     dropZone.style.display = '';
-    if (suggestions) suggestions.innerHTML = '';
-    updateAnalyzeButton();
+    updateContinueButton();
 }
 
-function updateAnalyzeButton() {
-    analyzeBtn.disabled = !(sessionId && description.value.trim());
+function updateContinueButton() {
+    if (continueBtn) {
+        continueBtn.disabled = !sessionId;
+    }
 }
-
-description.addEventListener('input', updateAnalyzeButton);
 
 // ============================================================================
-// ANALYZE
+// ANALYZE (called automatically when continuing)
 // ============================================================================
 
-let analysisData = null; // Store analysis data for advanced options
+let analysisData = null;
 
-analyzeBtn.addEventListener('click', async () => {
-    if (!sessionId || !description.value.trim()) return;
-    
-    try {
-        setButtonLoading(analyzeBtn, true);
-        
-        const response = await fetch(`${API_URL}/analyze`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: sessionId,
-                user_description: description.value.trim(),
-            }),
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.detail || 'Analysis failed');
-        }
-        
-        analysisData = data;
-        
-        // Store sample data for later use
-        if (data.sample_rows) {
-            analysisData.sample_rows = data.sample_rows;
-        }
-        
-        // Populate Advanced Options
-        populateAdvancedOptions(data);
-        
-        // Build label color map from sample data
-        if (data.sample_rows && data.sample_rows.length > 0) {
-            buildLabelColorMap(data.sample_rows, data.columns);
-        }
-        
-        // Show inline analysis result (stay on step 1)
-        showInlineAnalysis(data);
-        
-        // Swap buttons: hide Analyze, show Continue
-        analyzeBtn.classList.add('hidden');
-        continueBtn.classList.remove('hidden');
-        
-    } catch (error) {
-        alert('Analysis failed: ' + error.message);
-    } finally {
-        setButtonLoading(analyzeBtn, false);
-    }
-});
-
-// Show inline analysis result on Upload page
-function showInlineAnalysis(data) {
-    if (!inlineAnalysis) return;
-    
-    // Get detected columns from API's column_candidates
-    let inputCol = null;
-    let outputCol = null;
-    
-    // First try column_candidates from API (this is what the agent detects)
-    // For classification: text_column, label_column (arrays)
-    // For NER: text_column, tags_column
-    // For instruction: instruction_column, response_column
-    if (data.column_candidates) {
-        const candidates = data.column_candidates;
-        
-        // Get first item from arrays (API returns arrays of candidates)
-        if (candidates.text_column && candidates.text_column.length > 0) {
-            inputCol = candidates.text_column[0];
-        } else if (candidates.instruction_column && candidates.instruction_column.length > 0) {
-            inputCol = candidates.instruction_column[0];
-        }
-        
-        if (candidates.label_column && candidates.label_column.length > 0) {
-            outputCol = candidates.label_column[0];
-        } else if (candidates.tags_column && candidates.tags_column.length > 0) {
-            outputCol = candidates.tags_column[0];
-        } else if (candidates.response_column && candidates.response_column.length > 0) {
-            outputCol = candidates.response_column[0];
-        }
-    }
-    
-    // If still not found, use smart heuristics
-    if (!inputCol || !outputCol) {
-        const cols = data.columns || [];
-        const colsLower = cols.map(c => c.toLowerCase());
-        
-        // Common input column names
-        const inputPatterns = ['text', 'input', 'message', 'content', 'sentence', 'review', 'comment', 'body', 'question', 'email'];
-        // Common output column names  
-        const outputPatterns = ['label', 'category', 'class', 'target', 'output', 'sentiment', 'type', 'tag', 'spam'];
-        
-        // Find input column
-        if (!inputCol) {
-            for (const pattern of inputPatterns) {
-                const idx = colsLower.findIndex(c => c.includes(pattern));
-                if (idx !== -1) {
-                    inputCol = cols[idx];
-                    break;
-                }
-            }
-        }
-        
-        // Find output column
-        if (!outputCol) {
-            for (const pattern of outputPatterns) {
-                const idx = colsLower.findIndex(c => c.includes(pattern));
-                if (idx !== -1) {
-                    outputCol = cols[idx];
-                    break;
-                }
-            }
-        }
-        
-        // If still not found, look at sample data characteristics
-        if (!inputCol || !outputCol) {
-            if (data.sample_rows && data.sample_rows.length > 0) {
-                const firstRow = data.sample_rows[0];
-                for (const col of cols) {
-                    const value = firstRow[col];
-                    if (typeof value === 'string') {
-                        // Long text = likely input, short text = likely label
-                        if (value.length > 50 && !inputCol && !col.toLowerCase().includes('id')) {
-                            inputCol = col;
-                        } else if (value.length < 30 && !outputCol && !col.toLowerCase().includes('id') && !col.toLowerCase().includes('key')) {
-                            outputCol = col;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Final fallback - skip ID/key columns
-        const skipPatterns = ['id', 'key', 'index', 'idx', 'timestamp', 'date', 'time'];
-        if (!inputCol) {
-            inputCol = cols.find(c => !skipPatterns.some(p => c.toLowerCase().includes(p))) || cols[0];
-        }
-        if (!outputCol) {
-            outputCol = cols.find(c => c !== inputCol && !skipPatterns.some(p => c.toLowerCase().includes(p))) || cols[cols.length - 1];
-        }
-    }
-    
-    // Update inline display
-    document.getElementById('inlineTaskType').textContent = formatTaskType(data.inferred_task_type);
-    document.getElementById('inlineInputCol').textContent = inputCol || 'text';
-    document.getElementById('inlineOutputCol').textContent = outputCol || 'label';
-    
-    // Store detected columns for later use
-    data.detected_input_column = inputCol;
-    data.detected_output_column = outputCol;
-    
-    // Show the inline analysis card
-    inlineAnalysis.classList.remove('hidden');
-}
+// (showInlineAnalysis removed - not needed in new design)
 
 // Toggle Advanced Options Modal
 const advancedModal = document.getElementById('advancedModal');
@@ -880,48 +575,52 @@ async function showAllRows(sessionId, inputCol, outputCol) {
 }
 
 // ============================================================================
-// PLAN (Continue button from Upload page)
+// CONTINUE (Analyze + Plan in one step)
 // ============================================================================
 
 continueBtn?.addEventListener('click', async () => {
+    if (!sessionId) return;
+    
     try {
         setButtonLoading(continueBtn, true);
         
-        // Build request with user configuration if set
-        const planRequest = { session_id: sessionId };
-        
-        // Include user overrides if they configured via Advanced Options
-        if (userConfig.inputColumn) {
-            planRequest.input_column = userConfig.inputColumn;
-        }
-        if (userConfig.outputColumn) {
-            planRequest.output_column = userConfig.outputColumn;
-        }
-        if (userConfig.taskType) {
-            planRequest.task_type = userConfig.taskType;
-        }
-        
-        console.log('[Plan] Sending request with config:', planRequest);
-        
-        const response = await fetch(`${API_URL}/plan`, {
+        // Step 1: Analyze the dataset
+        const analyzeResponse = await fetch(`${API_URL}/analyze`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(planRequest),
+            body: JSON.stringify({
+                session_id: sessionId,
+                user_description: 'Fine-tune model on this dataset',
+            }),
         });
         
-        const data = await response.json();
+        const analyzeData = await analyzeResponse.json();
         
-        if (!response.ok) {
-            throw new Error(data.detail || 'Planning failed');
+        if (!analyzeResponse.ok) {
+            throw new Error(analyzeData.detail || 'Analysis failed');
         }
         
-        // Update new Plan UI
-        updatePlanUI(data);
+        analysisData = analyzeData;
         
-        setStep(2); // Now Plan is step 2
+        // Step 2: Generate training plan
+        const planResponse = await fetch(`${API_URL}/plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId }),
+        });
+        
+        const planData = await planResponse.json();
+        
+        if (!planResponse.ok) {
+            throw new Error(planData.detail || 'Planning failed');
+        }
+        
+        // Update Plan UI and go to step 2
+        updatePlanUI(planData);
+        setStep(2);
         
     } catch (error) {
-        alert('Planning failed: ' + error.message);
+        alert('Error: ' + error.message);
     } finally {
         setButtonLoading(continueBtn, false);
     }
@@ -1516,36 +1215,26 @@ generateBtn.addEventListener('click', async () => {
 // ============================================================================
 
 backToUpload.addEventListener('click', () => {
-    // Reset inline analysis state when going back to upload
-    if (inlineAnalysis) inlineAnalysis.classList.add('hidden');
-    analyzeBtn.classList.remove('hidden');
-    continueBtn.classList.add('hidden');
-    // Reset user configuration so fresh analysis is used
     userConfig = { inputColumn: null, outputColumn: null, taskType: null };
     setStep(1);
 });
-backToPlan.addEventListener('click', () => setStep(2)); // Plan is now step 2
+
+backToPlan.addEventListener('click', () => setStep(2));
 
 startOver.addEventListener('click', () => {
     sessionId = null;
     jobId = null;
     stopStatusPolling();
     clearFile();
-    description.value = '';
     
-    // Reset user configuration
     userConfig = { inputColumn: null, outputColumn: null, taskType: null };
     
-    // Reset inline analysis
-    if (inlineAnalysis) inlineAnalysis.classList.add('hidden');
-    analyzeBtn.classList.remove('hidden');
-    continueBtn.classList.add('hidden');
-    
     // Reset step 4 views
-    document.getElementById('trainingProgress').classList.add('hidden');
-    document.getElementById('trainingComplete').classList.add('hidden');
-    document.getElementById('downloadPackage').classList.add('hidden');
-    document.getElementById('logOutput').innerHTML = '<div class="log-line">Initializing training environment...</div>';
+    document.getElementById('trainingProgress')?.classList.add('hidden');
+    document.getElementById('trainingComplete')?.classList.add('hidden');
+    document.getElementById('downloadPackage')?.classList.add('hidden');
+    const logOutput = document.getElementById('logOutput');
+    if (logOutput) logOutput.innerHTML = '<div class="log-line">Initializing...</div>';
     
     setStep(1);
 });
