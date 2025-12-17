@@ -1,13 +1,10 @@
 """
 Validate Quality Tool
 =====================
-Quality gate BEFORE analysis/agent. Blocks bad data early.
-Decision: score >= 0.6 -> proceed | score < 0.6 -> human review
+Quality checks for JSONL chat format data.
 """
 
-from typing import TYPE_CHECKING
-
-import pandas as pd
+from typing import TYPE_CHECKING, List, Dict, Set
 
 if TYPE_CHECKING:
     from tunekit.state import TuneKitState
@@ -15,88 +12,132 @@ if TYPE_CHECKING:
 
 def validate_quality(state: "TuneKitState") -> dict:
     """
-    Quality gate BEFORE analysis/agent. Blocks bad data early.
+    Quality checks for chat format data.
     
     Inputs (from state):
-        - raw_data: List[Dict]
-        - columns: List[str]
+        - raw_data: List[Dict] - conversation data
         - num_rows: int
     
     Outputs (to state):
         - quality_score: float (0.0 to 1.0)
         - quality_issues: List[str]
-    
-    Decision: score >= 0.6 -> proceed | score < 0.6 -> human review
     """
-    raw_data = state["raw_data"]
-    columns = state["columns"]
-    num_rows = state["num_rows"]
+    raw_data = state.get("raw_data", [])
+    num_rows = state.get("num_rows", 0)
     
     if not raw_data:
         return {"quality_score": 0.0, "quality_issues": ["No data available"]}
     
     score = 1.0
-    issues = []
+    issues: List[str] = []
     
-    # --- Check 1: Duplicates ---
-    seen = set()
+    # --- Check 1: Duplicate conversations ---
+    seen_conversations: Set[str] = set()
     duplicates = 0
-    for row in raw_data:
-        row_tuple = tuple(sorted(row.items()))
-        if row_tuple in seen:
+    
+    for entry in raw_data:
+        # Create a fingerprint of the conversation
+        fingerprint = "|".join(
+            f"{msg['role']}:{msg['content'][:100]}"
+            for msg in entry["messages"]
+        )
+        if fingerprint in seen_conversations:
             duplicates += 1
         else:
-            seen.add(row_tuple)
+            seen_conversations.add(fingerprint)
     
     if duplicates > 0:
         dup_ratio = duplicates / num_rows
-        score -= min(dup_ratio * 0.3, 0.3)
-        issues.append(f"{duplicates} duplicate rows ({dup_ratio:.0%})")
+        score -= min(dup_ratio * 0.4, 0.3)
+        issues.append(f"⚠️ {duplicates} duplicate conversations ({dup_ratio:.0%})")
     
-    # --- Check 2: Missing Values (per column) ---
-    missing_by_col = {col: 0 for col in columns}
-    for row in raw_data:
-        for col in columns:
-            val = row.get(col)
-            if val is None or val == "" or (isinstance(val, float) and pd.isna(val)):
-                missing_by_col[col] += 1
-    
-    total_missing = sum(missing_by_col.values())
-    if total_missing > 0:
-        miss_ratio = total_missing / (num_rows * len(columns))
-        score -= min(miss_ratio * 0.5, 0.3)
-        
-        # Report which columns have missing values
-        cols_with_missing = {col: count for col, count in missing_by_col.items() if count > 0}
-        issues.append(f"{total_missing} missing values found:")
-        for col, count in sorted(cols_with_missing.items(), key=lambda x: x[1], reverse=True):
-            issues.append(f"  -> '{col}': {count} missing ({count/num_rows:.0%} of rows)")
-    
-    # --- Check 3: Dataset Size ---
+    # --- Check 2: Dataset size ---
     if num_rows < 50:
-        score -= 0.4
-        issues.append(f"Very small dataset ({num_rows} rows) - need 50+")
+        score -= 0.5
+        issues.append(f"❌ Too few examples ({num_rows}). Need at least 50.")
     elif num_rows < 100:
         score -= 0.2
-        issues.append(f"Small dataset ({num_rows} rows) - 100+ recommended")
+        issues.append(f"⚠️ Small dataset ({num_rows}). 100+ recommended for better results.")
+    elif num_rows < 500:
+        score -= 0.1
+        issues.append(f"💡 {num_rows} examples. 500+ recommended for best results.")
+    
+    # --- Check 3: Very short responses ---
+    short_responses = 0
+    very_long_responses = 0
+    
+    for entry in raw_data:
+        for msg in entry["messages"]:
+            if msg["role"] == "assistant":
+                content_len = len(msg["content"])
+                if content_len < 10:
+                    short_responses += 1
+                elif content_len > 4000:
+                    very_long_responses += 1
+    
+    if short_responses > 0:
+        short_ratio = short_responses / num_rows
+        if short_ratio > 0.1:
+            score -= 0.15
+            issues.append(f"⚠️ {short_responses} very short assistant responses (<10 chars)")
+    
+    if very_long_responses > 0:
+        long_ratio = very_long_responses / num_rows
+        if long_ratio > 0.1:
+            score -= 0.1
+            issues.append(f"💡 {very_long_responses} very long responses (>4000 chars) - may need truncation")
+    
+    # --- Check 4: Conversation structure consistency ---
+    single_turn = 0
+    multi_turn = 0
+    
+    for entry in raw_data:
+        non_system = [m for m in entry["messages"] if m["role"] != "system"]
+        if len(non_system) == 2:
+            single_turn += 1
+        else:
+            multi_turn += 1
+    
+    # Note: Not penalizing, just informing
+    if single_turn > 0 and multi_turn > 0:
+        issues.append(f"💡 Mixed format: {single_turn} single-turn, {multi_turn} multi-turn conversations")
+    
+    # --- Check 5: System prompt consistency ---
+    has_system = 0
+    no_system = 0
+    
+    for entry in raw_data:
+        if any(msg["role"] == "system" for msg in entry["messages"]):
+            has_system += 1
+        else:
+            no_system += 1
+    
+    if has_system > 0 and no_system > 0:
+        # Inconsistent system prompts
+        score -= 0.1
+        issues.append(f"⚠️ Inconsistent: {has_system} with system prompt, {no_system} without")
     
     # --- Finalize ---
     score = max(0.0, min(1.0, score))
     
     if score >= 0.8:
         level = "excellent"
+        emoji = "✅"
     elif score >= 0.6:
         level = "acceptable"
+        emoji = "👍"
     else:
-        level = "poor"
+        level = "needs improvement"
+        emoji = "⚠️"
     
-    print(f"Quality: {score:.2f} ({level})")
+    print(f"\n{emoji} Quality Score: {score:.2f} ({level})")
     if issues:
         for issue in issues:
             print(f"   {issue}")
+    else:
+        print("   ✅ Data looks good!")
     
     return {
         "quality_score": score,
-        "quality_issues": issues if issues else ["Data looks good!"]
+        "quality_issues": issues if issues else ["✅ Data looks good!"]
     }
-
