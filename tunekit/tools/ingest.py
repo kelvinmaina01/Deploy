@@ -199,17 +199,26 @@ def ingest_data(state: "TuneKitState") -> dict:
             sample_lengths.append(total_len)
         avg_length = sum(sample_lengths) / len(sample_lengths) if sample_lengths else 0
         
+        # Check for very long conversations (token limit warning)
+        warnings: List[str] = []
+        if avg_length > 8000:
+            warnings.append("⚠️ Very long conversations - may hit token limits during training")
+        
         stats = {
             "total_examples": num_rows,
             "total_messages": total_messages,
             "avg_messages_per_example": round(avg_messages, 1),
             "has_system_prompts": has_system,
             "avg_conversation_length": round(avg_length),
+            "warnings": warnings,
         }
         
         print(f"✅ Loaded {num_rows} conversations")
         print(f"📊 {total_messages} total messages ({avg_messages:.1f} avg per example)")
         print(f"💬 System prompts: {'Yes' if has_system else 'No'}")
+        if warnings:
+            for w in warnings:
+                print(f"   {w}")
         
         return {
             "raw_data": raw_data,
