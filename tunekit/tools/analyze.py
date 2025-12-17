@@ -1,154 +1,201 @@
 """
 Analyze Dataset Tool
 ====================
-Smart dataset analysis that detects task type and finds column candidates.
+Analyze JSONL chat format dataset for statistics and characteristics.
 """
 
-from typing import TYPE_CHECKING
+import statistics
+from typing import TYPE_CHECKING, List, Dict, Set
 
 if TYPE_CHECKING:
     from tunekit.state import TuneKitState
 
 
-def _analyze_column(values: list) -> dict:
-    """Analyze column values and return type + stats."""
-    if not values:
-        return {"type": "empty", "unique_count": 0, "avg_length": 0}
-    
-    # Handle list columns (NER tokens)
-    if isinstance(values[0], list):
-        flat = [s for v in values[:10] for s in v if isinstance(s, str)]
-        has_bio = any("B-" in s or "I-" in s or s == "O" for s in flat)
-        return {"type": "bio_tags" if has_bio else "list", "unique_count": 0, "avg_length": 0}
-    
-    # Convert to strings
-    str_vals = [str(v) for v in values if v is not None]
-    if not str_vals:
-        return {"type": "empty", "unique_count": 0, "avg_length": 0}
-    
-    unique_count = len(set(str_vals))
-    unique_ratio = unique_count / len(str_vals)
-    avg_length = sum(len(v) for v in str_vals) / len(str_vals)
-    
-    # Determine type
-    if any("B-" in v or "I-" in v for v in str_vals[:20]):
-        col_type = "bio_tags"
-    elif unique_ratio > 0.5 or avg_length > 50:
-        col_type = "text"
-    elif unique_count <= 30:
-        col_type = "categorical"
-    else:
-        col_type = "text"
-    
-    return {"type": col_type, "unique_count": unique_count, "avg_length": avg_length}
-
-
 def analyze_dataset(state: "TuneKitState") -> dict:
     """
-    Detect task type and find column candidates for Agent 1.
+    Analyze chat format dataset and extract statistics.
     
     Inputs (from state):
-        - raw_data: List[Dict]
-        - columns: List[str]
+        - raw_data: List[Dict] - conversation data
         - num_rows: int
-        - sample_rows: List[Dict]
+        - stats: Dict (from ingest)
     
     Outputs (to state):
-        - inferred_task_type: str
-        - task_confidence: float
-        - num_classes: int (for classification)
-        - label_list: List[str] (actual labels found)
-        - column_analysis: Dict
-        - column_candidates: Dict
-        - dataset_stats: Dict
+        - dataset_stats: Dict - comprehensive statistics
+        - conversation_characteristics: Dict - patterns detected
     """
-    raw_data = state["raw_data"]
-    columns = state["columns"]
-    num_rows = state["num_rows"]
+    raw_data = state.get("raw_data", [])
+    num_rows = state.get("num_rows", 0)
     
-    if not raw_data or not columns:
+    if not raw_data:
         return {
-            "inferred_task_type": None, 
-            "task_confidence": 0.0, 
-            "column_analysis": {}, 
-            "column_candidates": {}
+            "dataset_stats": {},
+            "conversation_characteristics": {}
         }
     
-    # Analyze each column
-    col_info = {}
-    for col in columns:
-        values = [row.get(col) for row in raw_data if row.get(col) is not None]
-        col_info[col] = _analyze_column(values)
+    # --- Analyze conversation patterns ---
     
-    # Build lowercase lookup
-    cols_lower = {c.lower(): c for c in columns}
+    # Count message types
+    total_user_msgs = 0
+    total_assistant_msgs = 0
+    total_system_msgs = 0
     
-    # --- Detect task type ---
+    # Track conversation lengths
+    conversation_lengths = []
+    user_message_lengths = []
+    assistant_message_lengths = []
     
-    # 1. Instruction tuning (keyword match)
-    inst_keys = ["instruction", "prompt", "input", "question", "query"]
-    resp_keys = ["response", "completion", "output", "answer", "reply"]
-    inst_cols = [cols_lower[k] for k in inst_keys if k in cols_lower]
-    resp_cols = [cols_lower[k] for k in resp_keys if k in cols_lower]
+    # Track unique assistant responses (for classification detection)
+    unique_assistant_responses: Set[str] = set()
     
-    if inst_cols and resp_cols:
-        task_type, confidence = "instruction_tuning", 0.9
-        sys_cols = [cols_lower.get(k) for k in ["system", "system_prompt"]]
-        candidates = {
-            "instruction_column": inst_cols,
-            "response_column": resp_cols,
-            "system_column": [c for c in sys_cols if c]
-        }
+    # Track conversation structures
+    single_turn_count = 0
+    multi_turn_count = 0
+    has_system_count = 0
     
-    # 2. NER (BIO tags detected)
-    elif any(col_info[c]["type"] == "bio_tags" for c in columns):
-        task_type, confidence = "ner", 0.85
-        candidates = {
-            "text_column": [c for c in columns if col_info[c]["type"] in ["text", "list"]] or [columns[0]],
-            "tags_column": [c for c in columns if col_info[c]["type"] == "bio_tags"]
-        }
-    
-    # 3. Classification (default)
-    else:
-        task_type = "classification"
-        text_cols = [c for c in columns if col_info[c]["type"] == "text"]
-        label_cols = [c for c in columns if col_info[c]["type"] == "categorical"]
+    for entry in raw_data:
+        messages = entry.get("messages", [])
+        conversation_lengths.append(len(messages))
         
-        # Sort: longest text first, fewest unique labels first
-        text_cols.sort(key=lambda c: col_info[c]["avg_length"], reverse=True)
-        label_cols.sort(key=lambda c: col_info[c]["unique_count"])
+        # Count by role
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            content_len = len(content)
+            
+            if role == "user":
+                total_user_msgs += 1
+                user_message_lengths.append(content_len)
+            elif role == "assistant":
+                total_assistant_msgs += 1
+                assistant_message_lengths.append(content_len)
+                unique_assistant_responses.add(content.strip().lower())
+            elif role == "system":
+                total_system_msgs += 1
         
-        confidence = 0.8 if (text_cols and label_cols) else 0.4
-        candidates = {"text_column": text_cols, "label_column": label_cols}
+        # Check structure
+        non_system = [m for m in messages if m.get("role") != "system"]   #messages without system prompts
+        if len(non_system) == 2:
+            single_turn_count += 1
+        else:
+            multi_turn_count += 1
+        
+        if any(m.get("role") == "system" for m in messages):
+            has_system_count += 1
     
-    # Count classes for classification (filter out None/empty)
-    num_classes = None
-    label_list = None
-    if task_type == "classification" and candidates.get("label_column"):
-        label_col = candidates["label_column"][0]
-        labels = set()
-        for row in raw_data:
-            val = row.get(label_col)
-            if val is not None and str(val).strip():
-                labels.add(str(val).strip())
-        if labels:
-            num_classes = len(labels)
-            label_list = sorted(list(labels))
+    # Calculate averages
+    avg_conversation_length = sum(conversation_lengths) / len(conversation_lengths) if conversation_lengths else 0
+    avg_user_length = sum(user_message_lengths) / len(user_message_lengths) if user_message_lengths else 0
+    avg_assistant_length = sum(assistant_message_lengths) / len(assistant_message_lengths) if assistant_message_lengths else 0
     
-    print(f"Analysis: {task_type} (confidence: {confidence:.0%})")
-    print(f"Candidates: {candidates}")
+    # Detect if this looks like classification (few unique responses)
+    num_unique_responses = len(unique_assistant_responses)
+    looks_like_classification = num_unique_responses < 20 and num_unique_responses > 0
+    
+    # Detect if responses are very short (classification-like)
+    avg_response_short = avg_assistant_length < 50
+    
+    # Detect language (check for non-ASCII)
+    non_ascii_count = 0
+    sample_responses = list(unique_assistant_responses)[:50]  # Sample first 50
+    for response in sample_responses:
+        if any(ord(c) > 127 for c in response):
+            non_ascii_count += 1
+    
+    sample_size = min(50, len(unique_assistant_responses))
+    is_multilingual = (non_ascii_count / sample_size) > 0.3 if sample_size > 0 else False
+    
+    # Calculate output variance (stdev / mean of assistant message lengths)
+    output_variance = 0.0
+    if assistant_message_lengths and len(assistant_message_lengths) > 1:
+        mean_length = statistics.mean(assistant_message_lengths)
+        if mean_length > 0:
+            stdev_length = statistics.stdev(assistant_message_lengths)
+            output_variance = round(stdev_length / mean_length, 2)
+    
+    # Detect JSON output (check if responses start with { or [)
+    json_like_count = 0
+    sample_assistant_responses = []
+    for entry in raw_data:
+        for msg in entry.get("messages", []):
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "").strip()
+                if content:
+                    sample_assistant_responses.append(content)
+                    if len(sample_assistant_responses) >= 50:
+                        break
+        if len(sample_assistant_responses) >= 50:
+            break
+    
+    for response in sample_assistant_responses[:50]:
+        stripped = response.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            json_like_count += 1
+    
+    looks_like_json_output = (json_like_count / len(sample_assistant_responses)) > 0.5 if sample_assistant_responses else False
+    
+    # Calculate total tokens (rough estimate: 1 token ≈ 4 chars)
+    total_chars = sum(
+        sum(len(msg.get("content", "")) for msg in entry.get("messages", []))
+        for entry in raw_data
+    )
+    estimated_tokens = total_chars // 4
+    
+    # Build comprehensive stats
+    total_messages = total_user_msgs + total_assistant_msgs + total_system_msgs
+    
+    dataset_stats = {
+        "num_examples": num_rows,
+        "total_messages": total_messages,
+        "avg_messages_per_example": round(avg_conversation_length, 1),
+        "message_counts": {
+            "user": total_user_msgs,
+            "assistant": total_assistant_msgs,
+            "system": total_system_msgs
+        },
+        "avg_lengths": {
+            "user_messages": round(avg_user_length),
+            "assistant_messages": round(avg_assistant_length),
+            "conversation": round(avg_conversation_length)
+        },
+        "conversation_structure": {
+            "single_turn": single_turn_count,
+            "multi_turn": multi_turn_count,
+            "with_system": has_system_count,
+            "without_system": num_rows - has_system_count
+        },
+        "estimated_tokens": estimated_tokens,
+        "has_system_prompts": has_system_count > 0
+    }
+    
+    # Conversation characteristics for model selection
+    conversation_characteristics = {
+        "looks_like_classification": looks_like_classification,
+        "num_unique_assistant_responses": num_unique_responses,
+        "avg_response_short": avg_response_short,
+        "avg_response_length": round(avg_assistant_length),
+        "is_multi_turn": multi_turn_count > single_turn_count,
+        "has_system_prompts": has_system_count > 0,
+        "avg_conversation_length": round(avg_conversation_length),
+        "is_multilingual": is_multilingual,
+        "output_variance": output_variance,
+        "looks_like_json_output": looks_like_json_output
+    }
+    
+    print(f"\n📊 Dataset Analysis:")
+    print(f"   Examples: {num_rows}")
+    print(f"   Total messages: {dataset_stats['total_messages']}")
+    print(f"   Avg per conversation: {dataset_stats['avg_messages_per_example']}")
+    print(f"   Structure: {single_turn_count} single-turn, {multi_turn_count} multi-turn")
+    print(f"   System prompts: {has_system_count}/{num_rows}")
+    print(f"   Unique assistant responses: {num_unique_responses}")
+    if looks_like_classification:
+        print(f"   💡 Appears to be classification-style data")
+    if is_multilingual:
+        print(f"   🌍 Multilingual dataset detected")
+    print(f"   Estimated tokens: ~{estimated_tokens:,}")
     
     return {
-        "inferred_task_type": task_type,
-        "task_confidence": confidence,
-        "num_classes": num_classes,
-        "label_list": label_list,
-        "column_analysis": col_info,
-        "column_candidates": candidates,
-        "dataset_stats": {
-            "num_rows": num_rows,
-            "num_columns": len(columns),
-            "sample_rows": state.get("sample_rows", [])[:3]
-        }
+        "dataset_stats": dataset_stats,
+        "conversation_characteristics": conversation_characteristics
     }
-

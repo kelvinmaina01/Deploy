@@ -20,9 +20,10 @@ class TuneKitState(TypedDict):
     # STAGE 1: INGESTION (output of ingest_data tool)
     # -------------------------------------------------------------------------
     raw_data: Optional[List[Dict[str, Any]]]       # All rows as list of dicts
-    columns: Optional[List[str]]                   # Column names
+    columns: Optional[List[str]]                   # Column names (legacy, not used for JSONL)
     sample_rows: Optional[List[Dict[str, Any]]]    # First 5 rows for preview
     num_rows: Optional[int]                        # Total row count
+    stats: Optional[Dict[str, Any]]                # Dataset statistics from ingest
     
     # -------------------------------------------------------------------------
     # STAGE 2: VALIDATION (output of validate_quality tool)
