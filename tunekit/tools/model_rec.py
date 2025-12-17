@@ -55,6 +55,23 @@ MODELS = {
     }
 }
 
+# Deployment target filters - which models are viable for each deployment
+DEPLOYMENT_FILTERS = {
+    'cloud_api': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b', 'qwen-2.5-3b', 'mistral-7b'],  # All models supported
+    
+    'ios_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b'],  # Core ML optimized, <4GB
+    
+    'android_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b'],  # TFLite/MediaPipe/NNAPI
+    
+    'edge_device': ['gemma-3-2b', 'phi-4-mini'],  # Low power (Pi, Jetson, embedded)
+    
+    'web_browser': ['gemma-3-2b', 'phi-4-mini', 'llama-3.2-3b'],  # WebGPU/Transformers.js
+    
+    'desktop_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b', 'qwen-2.5-3b', 'mistral-7b'],  # Full hardware, 8GB+ RAM
+    
+    'not_sure': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b', 'qwen-2.5-3b', 'mistral-7b']  # Show all options
+}
+
 
 def score_task_match(user_task: str, model_key: str) -> float:
     """Score based on task type match (0-20 points)."""
@@ -234,21 +251,72 @@ def score_speed_efficiency(num_examples: int, model_key: str) -> float:
             return 10
         elif model_key == 'phi-4-mini':
             return 7
-    else:
+        else:
             return 3
     
     return 0  # Larger datasets don't prioritize speed as much
 
 
+def score_deployment_match(deployment_target: str, model_key: str) -> float:
+    """Score based on deployment target match (0-15 points)."""
+    if deployment_target == 'not_sure' or deployment_target == 'cloud_api':
+        return 0  # No bonus, all models viable
+    
+    deployment_scores = {
+        'ios_app': {
+            'phi-4-mini': 15,  # Best iOS optimization
+            'gemma-3-2b': 12,  # Core ML compatible
+            'llama-3.2-3b': 10,  # Core ML compatible
+            'qwen-2.5-3b': 0,
+            'mistral-7b': 0
+        },
+        'android_app': {
+            'phi-4-mini': 15,  # Excellent Android support
+            'gemma-3-2b': 12,  # TFLite optimized
+            'llama-3.2-3b': 10,  # MediaPipe/NNAPI compatible
+            'qwen-2.5-3b': 0,
+            'mistral-7b': 0
+        },
+        'edge_device': {
+            'gemma-3-2b': 15,  # Smallest, most efficient
+            'phi-4-mini': 12,  # Good for Pi 5, Jetson
+            'llama-3.2-3b': 0,
+            'qwen-2.5-3b': 0,
+            'mistral-7b': 0
+        },
+        'web_browser': {
+            'gemma-3-2b': 15,  # Lightest for WebGPU
+            'phi-4-mini': 12,  # WebGPU compatible
+            'llama-3.2-3b': 10,  # Transformers.js support
+            'qwen-2.5-3b': 0,
+            'mistral-7b': 0
+        },
+        'desktop_app': {
+            'phi-4-mini': 15,  # Balanced performance
+            'gemma-3-2b': 12,  # Fast inference
+            'llama-3.2-3b': 12,  # High quality
+            'qwen-2.5-3b': 10,  # Multilingual option
+            'mistral-7b': 8  # Best quality if hardware allows
+        }
+    }
+    
+    return deployment_scores.get(deployment_target, {}).get(model_key, 0)
+
+
 def calculate_model_scores(
     user_task: str,
     conversation_characteristics: Dict,
-    num_examples: int
+    num_examples: int,
+    deployment_target: str = 'not_sure',
+    allowed_models: List[str] = None
 ) -> Dict[str, float]:
     """Calculate scores for all models (0-100 points each)."""
     scores = {}
     
-    for model_key in MODELS.keys():
+    # Filter models by deployment if needed
+    models_to_score = allowed_models if allowed_models else list(MODELS.keys())
+    
+    for model_key in models_to_score:
         score = 0.0
         
         # 1. Task match (20 points)
@@ -279,7 +347,11 @@ def calculate_model_scores(
         speed_score = score_speed_efficiency(num_examples, model_key)
         score += speed_score
         
-        # 8. Versatility fallback (5 points)
+        # 8. Deployment match (15 points)
+        deployment_score = score_deployment_match(deployment_target, model_key)
+        score += deployment_score
+        
+        # 9. Versatility fallback (5 points)
         score += 5
         
         scores[model_key] = score
@@ -288,7 +360,7 @@ def calculate_model_scores(
         print(f"\n📊 {MODELS[model_key]['name']} Score: {score:.1f}/100")
         print(f"   Task match: {task_score:.1f} | Size: {size_score:.1f} | Output: {output_score:.1f}")
         print(f"   Language: {lang_score:.1f} | Complexity: {complexity_score:.1f} | Classification: {classification_score:.1f}")
-        print(f"   Speed: {speed_score:.1f} | Base: 5.0")
+        print(f"   Speed: {speed_score:.1f} | Deployment: {deployment_score:.1f} | Base: 5.0")
     
     return scores
 
@@ -307,11 +379,24 @@ def generate_reasons(
     user_task: str,
     conversation_characteristics: Dict,
     num_examples: int,
-    normalized_score: float
+    normalized_score: float,
+    deployment_target: str = 'not_sure'
 ) -> List[str]:
     """Generate human-readable reasons for recommendation."""
     reasons = []
     model = MODELS[model_key]
+    
+    # Deployment-based reason (highest priority)
+    deployment_reasons = {
+        'ios_app': 'Optimized for iOS deployment',
+        'android_app': 'Lightweight for mobile apps',
+        'edge_device': 'Smallest model for edge devices',
+        'web_browser': 'Lightweight for browser deployment',
+        'desktop_app': 'Well-suited for desktop applications',
+        'cloud_api': 'Excellent for cloud API deployment'
+    }
+    if deployment_target in deployment_reasons and deployment_target != 'not_sure':
+        reasons.append(deployment_reasons[deployment_target])
     
     # Task-based reason
     task_reasons = {
@@ -363,10 +448,11 @@ def generate_reasons(
 def recommend_model(
     user_task: str,
     conversation_characteristics: Dict,
-    num_examples: int
+    num_examples: int,
+    deployment_target: str = 'not_sure'
 ) -> Dict:
     """
-    Recommend the best SLM model based on task and dataset characteristics.
+    Recommend the best SLM model based on task, dataset characteristics, and deployment target.
     
     Args:
         user_task: "classify" | "qa" | "conversation" | "generation" | "extraction"
@@ -380,17 +466,32 @@ def recommend_model(
             - output_variance
             - has_system_prompts
         num_examples: Dataset size
+        deployment_target: "cloud_api" | "ios_app" | "android_app" | "edge_device" | 
+                          "web_browser" | "desktop_app" | "not_sure"
     
     Returns:
         Dict with primary_recommendation, alternatives, and all_scores
     """
     print(f"\n🎯 Model Recommendation Analysis")
     print(f"   Task: {user_task}")
+    print(f"   Deployment: {deployment_target}")
     print(f"   Dataset size: {num_examples} examples")
     print(f"   Characteristics: {conversation_characteristics}")
     
-    # Calculate raw scores
-    raw_scores = calculate_model_scores(user_task, conversation_characteristics, num_examples)
+    # Filter models based on deployment target
+    allowed_models = DEPLOYMENT_FILTERS.get(deployment_target, DEPLOYMENT_FILTERS['not_sure'])
+    
+    if deployment_target != 'not_sure' and deployment_target != 'cloud_api':
+        print(f"\n🔍 Filtering models for {deployment_target}: {', '.join([MODELS[k]['name'] for k in allowed_models])}")
+    
+    # Calculate raw scores (only for allowed models)
+    raw_scores = calculate_model_scores(
+        user_task, 
+        conversation_characteristics, 
+        num_examples,
+        deployment_target,
+        allowed_models
+    )
     
     # Normalize to 0-1
     normalized_scores = normalize_scores(raw_scores)
@@ -414,7 +515,7 @@ def recommend_model(
         'size': primary_model['size'],
         'score': round(primary_score, 2),
         'confidence': confidence,
-        'reasons': generate_reasons(primary_key, user_task, conversation_characteristics, num_examples, primary_score),
+        'reasons': generate_reasons(primary_key, user_task, conversation_characteristics, num_examples, primary_score, deployment_target),
         'training_time_min': primary_model['training_time_min'],
         'cost_usd': primary_model['cost_usd'],
         'estimated_accuracy': round(estimated_accuracy, 1)

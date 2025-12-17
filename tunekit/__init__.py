@@ -16,7 +16,7 @@ from .tools import (
     ingest_data,
     validate_quality,
     analyze_dataset,
-    get_model_recommendation,
+    recommend_model,
     get_training_config,
     generate_package,
 )
@@ -33,7 +33,7 @@ __all__ = [
     "ingest_data",
     "validate_quality",
     "analyze_dataset",
-    "get_model_recommendation",
+    "recommend_model",
     "get_training_config",
     "generate_package",
     # Agents
