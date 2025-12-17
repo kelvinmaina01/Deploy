@@ -59,6 +59,8 @@ MODELS = {
 DEPLOYMENT_FILTERS = {
     'cloud_api': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b', 'qwen-2.5-3b', 'mistral-7b'],  # All models supported
     
+    'mobile_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b'],  # Cross-platform mobile (iOS + Android)
+    
     'ios_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b'],  # Core ML optimized, <4GB
     
     'android_app': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b'],  # TFLite/MediaPipe/NNAPI
@@ -263,6 +265,13 @@ def score_deployment_match(deployment_target: str, model_key: str) -> float:
         return 0  # No bonus, all models viable
     
     deployment_scores = {
+        'mobile_app': {
+            'phi-4-mini': 15,  # Best cross-platform support (iOS + Android)
+            'gemma-3-2b': 12,  # Works on both platforms
+            'llama-3.2-3b': 10,  # Core ML + MediaPipe compatible
+            'qwen-2.5-3b': 0,
+            'mistral-7b': 0
+        },
         'ios_app': {
             'phi-4-mini': 15,  # Best iOS optimization
             'gemma-3-2b': 12,  # Core ML compatible
@@ -316,7 +325,14 @@ def calculate_model_scores(
     # Filter models by deployment if needed
     models_to_score = allowed_models if allowed_models else list(MODELS.keys())
     
+    # Guard against empty allowed_models
+    if not models_to_score:
+        models_to_score = list(MODELS.keys())
+    
     for model_key in models_to_score:
+        # Skip invalid model keys
+        if model_key not in MODELS:
+            continue
         score = 0.0
         
         # 1. Task match (20 points)
@@ -367,7 +383,10 @@ def calculate_model_scores(
 
 def normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
     """Normalize scores to 0-1 range."""
-    max_score = max(scores.values()) if scores else 1.0
+    if not scores:
+        return {}
+    
+    max_score = max(scores.values())
     if max_score == 0:
         return {k: 0.0 for k in scores.keys()}
     
@@ -383,11 +402,15 @@ def generate_reasons(
     deployment_target: str = 'not_sure'
 ) -> List[str]:
     """Generate human-readable reasons for recommendation."""
+    if model_key not in MODELS:
+        return ["Model recommendation available"]
+    
     reasons = []
     model = MODELS[model_key]
     
     # Deployment-based reason (highest priority)
     deployment_reasons = {
+        'mobile_app': 'Cross-platform mobile deployment (iOS + Android)',
         'ios_app': 'Optimized for iOS deployment',
         'android_app': 'Lightweight for mobile apps',
         'edge_device': 'Smallest model for edge devices',
@@ -466,8 +489,8 @@ def recommend_model(
             - output_variance
             - has_system_prompts
         num_examples: Dataset size
-        deployment_target: "cloud_api" | "ios_app" | "android_app" | "edge_device" | 
-                          "web_browser" | "desktop_app" | "not_sure"
+        deployment_target: "cloud_api" | "mobile_app" | "ios_app" | "android_app" | 
+                          "edge_device" | "web_browser" | "desktop_app" | "not_sure"
     
     Returns:
         Dict with primary_recommendation, alternatives, and all_scores
@@ -480,6 +503,10 @@ def recommend_model(
     
     # Filter models based on deployment target
     allowed_models = DEPLOYMENT_FILTERS.get(deployment_target, DEPLOYMENT_FILTERS['not_sure'])
+    
+    # Guard against empty allowed_models
+    if not allowed_models:
+        allowed_models = DEPLOYMENT_FILTERS['not_sure']
     
     if deployment_target != 'not_sure' and deployment_target != 'cloud_api':
         print(f"\n🔍 Filtering models for {deployment_target}: {', '.join([MODELS[k]['name'] for k in allowed_models])}")
@@ -495,6 +522,10 @@ def recommend_model(
     
     # Normalize to 0-1
     normalized_scores = normalize_scores(raw_scores)
+    
+    # Guard against empty scores
+    if not normalized_scores:
+        raise ValueError("No models available for recommendation. Check deployment target and model filters.")
     
     # Sort by score
     sorted_models = sorted(normalized_scores.items(), key=lambda x: x[1], reverse=True)
