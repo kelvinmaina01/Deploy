@@ -1,122 +1,449 @@
 """
 Model Recommendation Tool
 =========================
-Rule-based model selection for different task types.
-
-Key insight:
-- BERT-sized models (66M-184M) -> Full fine-tuning (fits in consumer GPUs)
-- LLMs (1.1B-7B) -> QLoRA (makes large models accessible)
-- NER uses CASED models (capitalization matters for entities)
+Recommends Small Language Models (SLMs) based on task type and dataset characteristics.
 """
 
+from typing import Dict, List, Literal
 
-def get_classification_model(num_rows: int, user_description: str) -> dict:
-    """Pick best model for text classification."""
-    wants_speed = any(w in user_description.lower() for w in ["fast", "quick", "speed", "efficient"])
+# Model metadata
+MODELS = {
+    'phi-4-mini': {
+        'id': 'microsoft/Phi-4-mini-instruct',
+        'name': 'Phi-4 Mini',
+        'size': '3.8B',
+        'strengths': ['classification', 'reasoning', 'structured_output', 'ios'],
+        'training_time_min': 3,
+        'cost_usd': 0.18,
+        'accuracy_baseline': 87
+    },
+    'gemma-3-2b': {
+        'id': 'google/gemma-3-2b-it',
+        'name': 'Gemma 3 2B',
+        'size': '2B',
+        'strengths': ['speed', 'small_datasets', 'edge_deployment'],
+        'training_time_min': 2,
+        'cost_usd': 0.12,
+        'accuracy_baseline': 82
+    },
+    'llama-3.2-3b': {
+        'id': 'meta-llama/Llama-3.2-3B-Instruct',
+        'name': 'Llama 3.2 3B',
+        'size': '3B',
+        'strengths': ['quality', 'multi_turn', 'large_datasets'],
+        'training_time_min': 4,
+        'cost_usd': 0.20,
+        'accuracy_baseline': 89
+    },
+    'qwen-2.5-3b': {
+        'id': 'Qwen/Qwen2.5-3B-Instruct',
+        'name': 'Qwen 2.5 3B',
+        'size': '3B',
+        'strengths': ['multilingual', 'chinese', '29_languages'],
+        'training_time_min': 4,
+        'cost_usd': 0.20,
+        'accuracy_baseline': 88
+    },
+    'mistral-7b': {
+        'id': 'mistralai/Mistral-7B-Instruct-v0.3',
+        'name': 'Mistral 7B',
+        'size': '7B',
+        'strengths': ['long_generation', 'versatile', 'complex_tasks'],
+        'training_time_min': 6,
+        'cost_usd': 0.35,
+        'accuracy_baseline': 91
+    }
+}
+
+
+def score_task_match(user_task: str, model_key: str) -> float:
+    """Score based on task type match (0-20 points)."""
+    task_mapping = {
+        'classify': {
+            'phi-4-mini': 20,
+            'gemma-3-2b': 10,
+            'llama-3.2-3b': 12,
+            'qwen-2.5-3b': 10,
+            'mistral-7b': 8
+        },
+        'qa': {
+            'phi-4-mini': 12,
+            'gemma-3-2b': 8,
+            'llama-3.2-3b': 20,
+            'qwen-2.5-3b': 15,
+            'mistral-7b': 18
+        },
+        'conversation': {
+            'phi-4-mini': 10,
+            'gemma-3-2b': 8,
+            'llama-3.2-3b': 20,
+            'qwen-2.5-3b': 15,
+            'mistral-7b': 18
+        },
+        'generation': {
+            'phi-4-mini': 8,
+            'gemma-3-2b': 10,
+            'llama-3.2-3b': 15,
+            'qwen-2.5-3b': 12,
+            'mistral-7b': 20
+        },
+        'extraction': {
+            'phi-4-mini': 20,
+            'gemma-3-2b': 10,
+            'llama-3.2-3b': 12,
+            'qwen-2.5-3b': 10,
+            'mistral-7b': 15
+        }
+    }
     
-    if wants_speed and num_rows < 2000:
-        return {
-            "model": "distilbert-base-uncased", 
-            "method": "full",
-            "reasoning": "Fast model for speed priority"
+    return task_mapping.get(user_task, {}).get(model_key, 0)
+
+
+def score_dataset_size(num_examples: int, model_key: str) -> float:
+    """Score based on dataset size (0-15 points)."""
+    if num_examples < 500:
+        # Small dataset - Gemma is best
+        scores = {
+            'gemma-3-2b': 15,
+            'phi-4-mini': 8,
+            'llama-3.2-3b': 5,
+            'qwen-2.5-3b': 5,
+            'mistral-7b': 3
         }
-    if num_rows < 1000:
-        return {
-            "model": "distilbert-base-uncased", 
-            "method": "full",
-            "reasoning": "Small dataset - lightweight model to avoid overfitting"
-        }
-    elif num_rows < 5000:
-        return {
-            "model": "bert-base-uncased", 
-            "method": "full",
-            "reasoning": "Medium dataset - balanced BERT model"
-        }
-    elif num_rows < 10000:
-        return {
-            "model": "roberta-base", 
-            "method": "full",
-            "reasoning": "Large dataset - RoBERTa for best quality"
+    elif num_examples > 2000:
+        # Large dataset - Llama benefits most
+        scores = {
+            'llama-3.2-3b': 15,
+            'mistral-7b': 12,
+            'phi-4-mini': 10,
+            'qwen-2.5-3b': 10,
+            'gemma-3-2b': 5
         }
     else:
-        return {
-            "model": "microsoft/deberta-v3-base", 
-            "method": "full",
-            "reasoning": "Very large dataset - state-of-art DeBERTa model"
+        # Medium dataset - Phi-4 balanced
+        scores = {
+            'phi-4-mini': 15,
+            'llama-3.2-3b': 12,
+            'qwen-2.5-3b': 10,
+            'mistral-7b': 8,
+            'gemma-3-2b': 8
         }
-
-
-def get_ner_model(num_rows: int, user_description: str) -> dict:
-    """Pick best model for NER (uses CASED models - capitalization matters!)."""
-    wants_speed = any(w in user_description.lower() for w in ["fast", "quick", "speed", "efficient"])
     
-    if wants_speed and num_rows < 2000:
-        return {
-            "model": "distilbert-base-cased", 
-            "method": "full",
-            "reasoning": "Fast cased model for NER with speed priority"
-        }
-    if num_rows < 1000:
-        return {
-            "model": "distilbert-base-cased", 
-            "method": "full",
-            "reasoning": "Small dataset - lightweight cased model"
-        }
-    elif num_rows < 5000:
-        return {
-            "model": "bert-base-cased", 
-            "method": "full",
-            "reasoning": "Medium dataset - BERT-cased for entity recognition"
-        }
-    else:
-        return {
-            "model": "roberta-base", 
-            "method": "full",
-            "reasoning": "Large dataset - RoBERTa for best NER quality"
-        }
+    return scores.get(model_key, 0)
 
 
-def get_instruction_model(num_rows: int, user_description: str) -> dict:
-    """Pick best model for instruction tuning (always QLoRA - memory efficient)."""
-    wants_quality = any(w in user_description.lower() for w in ["accurate", "best", "quality", "production"])
+def score_output_characteristics(characteristics: Dict, model_key: str) -> float:
+    """Score based on output characteristics (0-15 points)."""
+    score = 0.0
     
-    if num_rows < 5000 and not wants_quality:
-        return {
-            "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
-            "method": "qlora",
-            "reasoning": "TinyLlama with QLoRA - efficient for instruction tuning"
-        }
+    avg_response_length = characteristics.get('avg_response_length', 0)
+    looks_like_json = characteristics.get('looks_like_json_output', False)
+    
+    # Short responses favor Phi-4
+    if avg_response_length < 50:
+        if model_key == 'phi-4-mini':
+            score += 15
+        elif model_key == 'gemma-3-2b':
+            score += 10
+        else:
+            score += 5
+    
+    # Long responses favor Mistral
+    elif avg_response_length > 200:
+        if model_key == 'mistral-7b':
+            score += 15
+        elif model_key == 'llama-3.2-3b':
+            score += 12
+        else:
+            score += 5
+    
+    # JSON output favors Phi-4
+    if looks_like_json:
+        if model_key == 'phi-4-mini':
+            score += 15
+        elif model_key in ['llama-3.2-3b', 'mistral-7b']:
+            score += 10
+        else:
+            score += 5
+    
+    return min(score, 15)  # Cap at 15
+
+
+def score_language(characteristics: Dict, model_key: str) -> float:
+    """Score based on language requirements (0-15 points)."""
+    is_multilingual = characteristics.get('is_multilingual', False)
+    
+    if is_multilingual:
+        if model_key == 'qwen-2.5-3b':
+            return 15
+        elif model_key == 'mistral-7b':
+            return 10
+        else:
+            return 5
+    
+    return 0  # No bonus for English-only
+
+
+def score_conversation_complexity(characteristics: Dict, model_key: str) -> float:
+    """Score based on conversation complexity (0-10 points)."""
+    is_multi_turn = characteristics.get('is_multi_turn', False)
+    
+    if is_multi_turn:
+        if model_key == 'llama-3.2-3b':
+            return 10
+        elif model_key == 'mistral-7b':
+            return 8
+        elif model_key == 'qwen-2.5-3b':
+            return 7
+        else:
+            return 5
+    
+    return 0  # Single-turn doesn't need special handling
+
+
+def score_classification_patterns(characteristics: Dict, model_key: str) -> float:
+    """Score based on classification patterns (0-10 points)."""
+    score = 0.0
+    
+    looks_like_classification = characteristics.get('looks_like_classification', False)
+    num_unique_responses = characteristics.get('num_unique_assistant_responses', 0)
+    
+    if looks_like_classification:
+        if model_key == 'phi-4-mini':
+            score += 10
+        elif model_key == 'gemma-3-2b':
+            score += 7
+        else:
+            score += 5
+    
+    if num_unique_responses < 10:
+        if model_key == 'phi-4-mini':
+            score += 10
+        elif model_key == 'gemma-3-2b':
+            score += 7
+        else:
+            score += 5
+    
+    return min(score, 10)  # Cap at 10
+
+
+def score_speed_efficiency(num_examples: int, model_key: str) -> float:
+    """Score based on speed/efficiency needs (0-10 points)."""
+    if num_examples < 500:
+        if model_key == 'gemma-3-2b':
+            return 10
+        elif model_key == 'phi-4-mini':
+            return 7
     else:
-        return {
-            "model": "meta-llama/Llama-2-7b-chat-hf", 
-            "method": "qlora",
-            "reasoning": "Llama-2 7B with QLoRA - best quality for instruction tuning"
-        }
+            return 3
+    
+    return 0  # Larger datasets don't prioritize speed as much
 
 
-def get_model_recommendation(task_type: str, num_rows: int, user_description: str) -> dict:
+def calculate_model_scores(
+    user_task: str,
+    conversation_characteristics: Dict,
+    num_examples: int
+) -> Dict[str, float]:
+    """Calculate scores for all models (0-100 points each)."""
+    scores = {}
+    
+    for model_key in MODELS.keys():
+        score = 0.0
+        
+        # 1. Task match (20 points)
+        task_score = score_task_match(user_task, model_key)
+        score += task_score
+        
+        # 2. Dataset size (15 points)
+        size_score = score_dataset_size(num_examples, model_key)
+        score += size_score
+        
+        # 3. Output characteristics (15 points)
+        output_score = score_output_characteristics(conversation_characteristics, model_key)
+        score += output_score
+        
+        # 4. Language (15 points)
+        lang_score = score_language(conversation_characteristics, model_key)
+        score += lang_score
+        
+        # 5. Conversation complexity (10 points)
+        complexity_score = score_conversation_complexity(conversation_characteristics, model_key)
+        score += complexity_score
+        
+        # 6. Classification patterns (10 points)
+        classification_score = score_classification_patterns(conversation_characteristics, model_key)
+        score += classification_score
+        
+        # 7. Speed/efficiency (10 points)
+        speed_score = score_speed_efficiency(num_examples, model_key)
+        score += speed_score
+        
+        # 8. Versatility fallback (5 points)
+        score += 5
+        
+        scores[model_key] = score
+        
+        # Print scoring breakdown
+        print(f"\n📊 {MODELS[model_key]['name']} Score: {score:.1f}/100")
+        print(f"   Task match: {task_score:.1f} | Size: {size_score:.1f} | Output: {output_score:.1f}")
+        print(f"   Language: {lang_score:.1f} | Complexity: {complexity_score:.1f} | Classification: {classification_score:.1f}")
+        print(f"   Speed: {speed_score:.1f} | Base: 5.0")
+    
+    return scores
+
+
+def normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
+    """Normalize scores to 0-1 range."""
+    max_score = max(scores.values()) if scores else 1.0
+    if max_score == 0:
+        return {k: 0.0 for k in scores.keys()}
+    
+    return {k: v / max_score for k, v in scores.items()}
+
+
+def generate_reasons(
+    model_key: str,
+    user_task: str,
+    conversation_characteristics: Dict,
+    num_examples: int,
+    normalized_score: float
+) -> List[str]:
+    """Generate human-readable reasons for recommendation."""
+    reasons = []
+    model = MODELS[model_key]
+    
+    # Task-based reason
+    task_reasons = {
+        'classify': 'Best for classification tasks',
+        'qa': 'Excellent for question answering',
+        'conversation': 'Optimized for multi-turn conversations',
+        'generation': 'Superior long-form generation',
+        'extraction': 'Strong structured data extraction'
+    }
+    if user_task in task_reasons:
+        reasons.append(task_reasons[user_task])
+    
+    # Dataset size reason
+    if num_examples < 500:
+        reasons.append(f'Optimal for small datasets ({num_examples} examples)')
+    elif num_examples > 2000:
+        reasons.append(f'Best performance on large datasets ({num_examples} examples)')
+    else:
+        reasons.append(f'Well-suited for your dataset size ({num_examples} examples)')
+    
+    # Output characteristics
+    if conversation_characteristics.get('looks_like_json_output'):
+        reasons.append('Excellent with structured JSON outputs')
+    
+    if conversation_characteristics.get('avg_response_length', 0) < 50:
+        reasons.append('Optimized for short, concise responses')
+    elif conversation_characteristics.get('avg_response_length', 0) > 200:
+        reasons.append('Handles long-form responses well')
+    
+    # Language
+    if conversation_characteristics.get('is_multilingual'):
+        reasons.append('Supports 29 languages including Chinese')
+    
+    # Classification
+    if conversation_characteristics.get('looks_like_classification'):
+        reasons.append('Strong classification performance')
+    
+    # Multi-turn
+    if conversation_characteristics.get('is_multi_turn'):
+        reasons.append('Excellent multi-turn conversation handling')
+    
+    # Speed
+    if num_examples < 500:
+        reasons.append(f'Fastest training time ({model["training_time_min"]} min)')
+    
+    return reasons[:3]  # Return top 3 reasons
+
+
+def recommend_model(
+    user_task: str,
+    conversation_characteristics: Dict,
+    num_examples: int
+) -> Dict:
     """
-    Master function: Returns {model, method, reasoning} for any task.
+    Recommend the best SLM model based on task and dataset characteristics.
     
     Args:
-        task_type: "classification", "ner", or "instruction_tuning"
-        num_rows: Dataset size
-        user_description: User's description (used to detect speed/quality preference)
+        user_task: "classify" | "qa" | "conversation" | "generation" | "extraction"
+        conversation_characteristics: Dict from analyze.py with:
+            - looks_like_classification
+            - num_unique_assistant_responses
+            - avg_response_length
+            - is_multi_turn
+            - is_multilingual
+            - looks_like_json_output
+            - output_variance
+            - has_system_prompts
+        num_examples: Dataset size
     
     Returns:
-        dict with keys: model, method, reasoning
-    
-    Rules:
-    - BERT-sized models (66M-184M) -> Full fine-tuning (fits in consumer GPUs)
-    - LLMs (1.1B-7B) -> QLoRA (makes large models accessible)
-    - NER uses CASED models (capitalization matters for entities)
+        Dict with primary_recommendation, alternatives, and all_scores
     """
-    if task_type == "classification":
-        return get_classification_model(num_rows, user_description)
-    elif task_type == "ner":
-        return get_ner_model(num_rows, user_description)
-    elif task_type == "instruction_tuning":
-        return get_instruction_model(num_rows, user_description)
-    else:
-        raise ValueError(f"Unknown task type: {task_type}")
-
+    print(f"\n🎯 Model Recommendation Analysis")
+    print(f"   Task: {user_task}")
+    print(f"   Dataset size: {num_examples} examples")
+    print(f"   Characteristics: {conversation_characteristics}")
+    
+    # Calculate raw scores
+    raw_scores = calculate_model_scores(user_task, conversation_characteristics, num_examples)
+    
+    # Normalize to 0-1
+    normalized_scores = normalize_scores(raw_scores)
+    
+    # Sort by score
+    sorted_models = sorted(normalized_scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # Primary recommendation
+    primary_key, primary_score = sorted_models[0]
+    primary_model = MODELS[primary_key]
+    
+    confidence = 'high' if primary_score >= 0.8 else ('medium' if primary_score >= 0.6 else 'low')
+    
+    # Estimate accuracy (baseline + boost from good fit)
+    accuracy_boost = min(primary_score * 5, 5)  # Up to 5% boost
+    estimated_accuracy = min(primary_model['accuracy_baseline'] + accuracy_boost, 95)
+    
+    primary_recommendation = {
+        'model_id': primary_model['id'],
+        'model_name': primary_model['name'],
+        'size': primary_model['size'],
+        'score': round(primary_score, 2),
+        'confidence': confidence,
+        'reasons': generate_reasons(primary_key, user_task, conversation_characteristics, num_examples, primary_score),
+        'training_time_min': primary_model['training_time_min'],
+        'cost_usd': primary_model['cost_usd'],
+        'estimated_accuracy': round(estimated_accuracy, 1)
+    }
+    
+    # Alternatives (top 2-3)
+    alternatives = []
+    for model_key, score in sorted_models[1:4]:  # Next 3 models
+        model = MODELS[model_key]
+        alt_reasons = []
+        
+        # Add reasons based on strengths
+        if score >= 0.7:
+            alt_reasons.append(f"Strong alternative ({score:.0%} match)")
+        if model['cost_usd'] < primary_model['cost_usd']:
+            alt_reasons.append(f"Lower cost (${model['cost_usd']})")
+        if model['training_time_min'] < primary_model['training_time_min']:
+            alt_reasons.append(f"Faster training ({model['training_time_min']} min)")
+        
+        alternatives.append({
+            'model_name': model['name'],
+            'score': round(score, 2),
+            'reasons': alt_reasons[:2] if alt_reasons else ['Good alternative option']
+        })
+    
+    print(f"\n✅ Recommended: {primary_model['name']} (score: {primary_score:.2f}, confidence: {confidence})")
+    
+    return {
+        'primary_recommendation': primary_recommendation,
+        'alternatives': alternatives,
+        'all_scores': {k: round(v, 2) for k, v in normalized_scores.items()}
+    }
