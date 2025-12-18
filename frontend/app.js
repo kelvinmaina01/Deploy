@@ -337,17 +337,36 @@ function showDatasetSummary(stats) {
     if (stats.warnings && stats.warnings.length > 0) {
         html += '<div class="stats-warnings">';
         stats.warnings.forEach(w => {
-            html += `<div class="warning-item">⚠️ ${w}</div>`;
+            // Check if this is the system prompt warning
+            if (w.includes('system prompt')) {
+                html += `
+                    <div class="warning-item with-action">
+                        <span>⚠️ ${w}</span>
+                        <button class="btn btn-secondary btn-small" id="openSystemPromptModal">
+                            Add System Prompt
+                        </button>
+                    </div>`;
+            } else {
+                html += `<div class="warning-item">⚠️ ${w}</div>`;
+            }
         });
         html += '</div>';
     }
     
     statsGrid.innerHTML = html;
     summaryCard.classList.remove('hidden');
-    
-    // Show system prompt card if no system prompts detected
+
+    // Setup modal for system prompts if needed
     if (!stats.has_system_prompts && stats.total_examples >= 50) {
-        showSystemPromptCard(stats);
+        setupSystemPromptModal(stats);
+
+        // Add event listener to the button (it's dynamically created)
+        setTimeout(() => {
+            const modalBtn = document.getElementById('openSystemPromptModal');
+            if (modalBtn) {
+                modalBtn.addEventListener('click', () => openSystemPromptModal());
+            }
+        }, 100);
     }
 }
 
@@ -357,11 +376,10 @@ function showDatasetSummary(stats) {
 
 let selectedSystemPrompt = null;
 
-function showSystemPromptCard(stats) {
-    const card = document.getElementById('systemPromptCard');
+function setupSystemPromptModal(stats) {
     const suggestedPrompts = document.getElementById('suggestedPrompts');
-    
-    if (!card) return;
+
+    if (!suggestedPrompts) return;
     
     // Generate suggested prompts based on dataset characteristics
     const suggestions = generateSuggestedPrompts(stats);
@@ -389,40 +407,48 @@ function showSystemPromptCard(stats) {
         });
     });
     
-    // Set up event listeners for buttons (in case they weren't set up before)
+    // Set up event listeners for modal
     setupSystemPromptListeners();
-    
-    card.classList.remove('hidden');
+}
+
+function openSystemPromptModal() {
+    const modal = document.getElementById('systemPromptModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeSystemPromptModal() {
+    const modal = document.getElementById('systemPromptModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 function setupSystemPromptListeners() {
-    // Add System Prompt button
-    const addBtn = document.getElementById('addSystemPromptBtn');
-    if (addBtn && !addBtn.dataset.listenerAttached) {
-        addBtn.addEventListener('click', () => {
-            document.getElementById('promptActions').classList.add('hidden');
-            document.getElementById('promptEditor').classList.remove('hidden');
-        });
-        addBtn.dataset.listenerAttached = 'true';
+    // Close modal button
+    const closeBtn = document.getElementById('closeModalBtn');
+    if (closeBtn && !closeBtn.dataset.listenerAttached) {
+        closeBtn.addEventListener('click', closeSystemPromptModal);
+        closeBtn.dataset.listenerAttached = 'true';
     }
-    
-    // Skip button
-    const skipBtn = document.getElementById('skipSystemPromptBtn');
-    if (skipBtn && !skipBtn.dataset.listenerAttached) {
-        skipBtn.addEventListener('click', () => {
-            hideSystemPromptCard();
-        });
-        skipBtn.dataset.listenerAttached = 'true';
-    }
-    
+
     // Cancel button
     const cancelBtn = document.getElementById('cancelPromptBtn');
     if (cancelBtn && !cancelBtn.dataset.listenerAttached) {
-        cancelBtn.addEventListener('click', () => {
-            document.getElementById('promptEditor').classList.add('hidden');
-            document.getElementById('promptActions').classList.remove('hidden');
-        });
+        cancelBtn.addEventListener('click', closeSystemPromptModal);
         cancelBtn.dataset.listenerAttached = 'true';
+    }
+
+    // Close modal when clicking outside
+    const modal = document.getElementById('systemPromptModal');
+    if (modal && !modal.dataset.listenerAttached) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeSystemPromptModal();
+            }
+        });
+        modal.dataset.listenerAttached = 'true';
     }
     
     // Tab switching
@@ -495,9 +521,9 @@ function setupSystemPromptListeners() {
                 
                 // Show success message with download option
                 showSystemPromptSuccess(data.modified_count || 0, sessionId);
-                
-                // Hide the card
-                hideSystemPromptCard();
+
+                // Close the modal
+                closeSystemPromptModal();
                 
             } catch (error) {
                 console.error('Error applying system prompt:', error);

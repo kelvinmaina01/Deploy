@@ -686,6 +686,108 @@ body {
     padding: 4px 0;
 }
 
+.warning-item.with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+/* ============================================================================
+   MODAL
+   ============================================================================ */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+}
+
+.modal-overlay.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration) var(--ease);
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 0;
+    max-height: calc(85vh - 180px);
+    overflow-y: auto;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px 28px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+}
+
 /* ============================================================================
    SYSTEM PROMPT CARD
    ============================================================================ */
@@ -705,15 +807,23 @@ body {
 .prompt-warning {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
+    gap: 16px;
     padding: 16px 20px;
     background: rgba(245, 158, 11, 0.08);
     border-bottom: 1px solid rgba(245, 158, 11, 0.2);
-    color: var(--warning);
-    font-size: 13px;
 }
 
-.prompt-warning svg {
+.warning-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--warning);
+    font-size: 13px;
+    flex: 1;
+}
+
+.warning-content svg {
     flex-shrink: 0;
 }
 
@@ -739,7 +849,7 @@ body {
 .prompt-tabs {
     display: flex;
     border-bottom: 1px solid var(--border);
-    padding: 0 20px;
+    padding: 0 28px;
 }
 
 .prompt-tab {
@@ -766,7 +876,7 @@ body {
 }
 
 .prompt-content {
-    padding: 20px;
+    padding: 24px 28px;
 }
 
 .prompt-content.hidden {

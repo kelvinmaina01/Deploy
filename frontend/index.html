@@ -208,45 +208,37 @@
                                 </div>
                             </div>
 
-                            <!-- System Prompt Suggestion -->
-                            <div class="system-prompt-card hidden" id="systemPromptCard">
-                                <div class="prompt-warning">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                    </svg>
-                                    <span>No system prompts detected. Adding one can improve model behavior.</span>
-                                </div>
-                                
-                                <div class="prompt-actions" id="promptActions">
-                                    <button class="btn btn-secondary" id="addSystemPromptBtn">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                                        </svg>
-                                        Add System Prompt
-                                    </button>
-                                    <button class="btn btn-ghost" id="skipSystemPromptBtn">Continue without</button>
-                                </div>
-
-                                <div class="prompt-editor hidden" id="promptEditor">
-                                    <div class="prompt-tabs">
-                                        <button class="prompt-tab active" data-tab="suggested">Suggested</button>
-                                        <button class="prompt-tab" data-tab="custom">Custom</button>
+                            <!-- System Prompt Modal -->
+                            <div class="modal-overlay hidden" id="systemPromptModal">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h3>Add System Prompt</h3>
+                                        <button class="modal-close" id="closeModalBtn">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                        </button>
                                     </div>
-                                    
-                                    <div class="prompt-content" id="suggestedPromptContent">
-                                        <div class="suggested-prompts" id="suggestedPrompts">
-                                            <!-- Populated by JS -->
+
+                                    <div class="modal-body">
+                                        <div class="prompt-tabs">
+                                            <button class="prompt-tab active" data-tab="suggested">Suggested</button>
+                                            <button class="prompt-tab" data-tab="custom">Custom</button>
+                                        </div>
+
+                                        <div class="prompt-content" id="suggestedPromptContent">
+                                            <div class="suggested-prompts" id="suggestedPrompts">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <div class="prompt-content hidden" id="customPromptContent">
+                                            <textarea class="prompt-textarea" id="customPromptInput" placeholder="Enter your system prompt..."></textarea>
                                         </div>
                                     </div>
-                                    
-                                    <div class="prompt-content hidden" id="customPromptContent">
-                                        <textarea class="prompt-textarea" id="customPromptInput" placeholder="Enter your system prompt..."></textarea>
-                                    </div>
-                                    
-                                    <div class="prompt-footer">
+
+                                    <div class="modal-footer">
                                         <button class="btn btn-ghost" id="cancelPromptBtn">Cancel</button>
                                         <button class="btn btn-primary" id="applyPromptBtn">Apply to Dataset</button>
                                     </div>
