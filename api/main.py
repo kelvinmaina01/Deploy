@@ -223,6 +223,9 @@ async def favicon():
     favicon_path = os.path.join(FRONTEND_DIR, "favicon.svg")
     if os.path.exists(favicon_path):
         return FileResponse(favicon_path, media_type="image/svg+xml")
+    logo_path = os.path.join(FRONTEND_DIR, "logo.png")
+    if os.path.exists(logo_path):
+        return FileResponse(logo_path, media_type="image/png")
     raise HTTPException(status_code=404)
 
 
@@ -520,12 +523,12 @@ async def analyze(request: AnalyzeRequest):
     
     if not state:
         file_path = session["file_path"]
-        state = create_empty_state(file_path, request.user_description)
-        result = ingest_data(state)
-        state.update(result)
-        
-        if state.get("error_msg"):
-            raise HTTPException(status_code=400, detail=state["error_msg"])
+    state = create_empty_state(file_path, request.user_description)
+    result = ingest_data(state)
+    state.update(result)
+    
+    if state.get("error_msg"):
+        raise HTTPException(status_code=400, detail=state["error_msg"])
     
     # Step 2: Validate
     result = validate_quality(state)

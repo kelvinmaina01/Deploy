@@ -101,16 +101,27 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 2px;
     text-decoration: none;
 }
 
 .logo-icon {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
 }
 
 .logo-text {
