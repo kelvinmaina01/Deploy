@@ -162,7 +162,7 @@ async function uploadFile(file) {
     // Show loading state
     continueBtn.disabled = true;
     continueBtn.innerHTML = 'Uploading... <span class="btn-loader"></span>';
-    
+        
     try {
         const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
@@ -344,6 +344,254 @@ function showDatasetSummary(stats) {
     
     statsGrid.innerHTML = html;
     summaryCard.classList.remove('hidden');
+    
+    // Show system prompt card if no system prompts detected
+    if (!stats.has_system_prompts && stats.total_examples >= 50) {
+        showSystemPromptCard(stats);
+    }
+}
+
+// ============================================================================
+// SYSTEM PROMPT FUNCTIONALITY
+// ============================================================================
+
+let selectedSystemPrompt = null;
+
+function showSystemPromptCard(stats) {
+    const card = document.getElementById('systemPromptCard');
+    const suggestedPrompts = document.getElementById('suggestedPrompts');
+    
+    if (!card) return;
+    
+    // Generate suggested prompts based on dataset characteristics
+    const suggestions = generateSuggestedPrompts(stats);
+    
+    // Render suggested prompts
+    suggestedPrompts.innerHTML = suggestions.map((s, i) => `
+        <div class="suggested-prompt-option ${i === 0 ? 'selected' : ''}" data-index="${i}">
+            <div class="prompt-radio"></div>
+            <div class="prompt-option-content">
+                <div class="prompt-option-label">${s.label}</div>
+                <div class="prompt-option-text">${s.prompt}</div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Select first by default
+    selectedSystemPrompt = suggestions[0]?.prompt || '';
+    
+    // Add click handlers for suggested prompts
+    document.querySelectorAll('.suggested-prompt-option').forEach(el => {
+        el.addEventListener('click', () => {
+            document.querySelectorAll('.suggested-prompt-option').forEach(o => o.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedSystemPrompt = suggestions[parseInt(el.dataset.index)]?.prompt || '';
+        });
+    });
+    
+    // Set up event listeners for buttons (in case they weren't set up before)
+    setupSystemPromptListeners();
+    
+    card.classList.remove('hidden');
+}
+
+function setupSystemPromptListeners() {
+    // Add System Prompt button
+    const addBtn = document.getElementById('addSystemPromptBtn');
+    if (addBtn && !addBtn.dataset.listenerAttached) {
+        addBtn.addEventListener('click', () => {
+            document.getElementById('promptActions').classList.add('hidden');
+            document.getElementById('promptEditor').classList.remove('hidden');
+        });
+        addBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Skip button
+    const skipBtn = document.getElementById('skipSystemPromptBtn');
+    if (skipBtn && !skipBtn.dataset.listenerAttached) {
+        skipBtn.addEventListener('click', () => {
+            hideSystemPromptCard();
+        });
+        skipBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Cancel button
+    const cancelBtn = document.getElementById('cancelPromptBtn');
+    if (cancelBtn && !cancelBtn.dataset.listenerAttached) {
+        cancelBtn.addEventListener('click', () => {
+            document.getElementById('promptEditor').classList.add('hidden');
+            document.getElementById('promptActions').classList.remove('hidden');
+        });
+        cancelBtn.dataset.listenerAttached = 'true';
+    }
+    
+    // Tab switching
+    document.querySelectorAll('.prompt-tab').forEach(tab => {
+        if (!tab.dataset.listenerAttached) {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                
+                // Update active tab
+                document.querySelectorAll('.prompt-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                document.getElementById('suggestedPromptContent').classList.toggle('hidden', tabName !== 'suggested');
+                document.getElementById('customPromptContent').classList.toggle('hidden', tabName !== 'custom');
+            });
+            tab.dataset.listenerAttached = 'true';
+        }
+    });
+    
+    // Apply button
+    const applyBtn = document.getElementById('applyPromptBtn');
+    if (applyBtn && !applyBtn.dataset.listenerAttached) {
+        applyBtn.addEventListener('click', async () => {
+            // Check if sessionId exists
+            if (!sessionId) {
+                showError('No active session. Please upload a file first.');
+                return;
+            }
+            
+            const customInput = document.getElementById('customPromptInput');
+            const customTab = document.querySelector('.prompt-tab[data-tab="custom"]');
+            const isCustomTab = customTab && customTab.classList.contains('active');
+            
+            const prompt = isCustomTab ? customInput.value.trim() : selectedSystemPrompt;
+            
+            if (!prompt) {
+                showError('Please enter or select a system prompt');
+                return;
+            }
+            
+            // Apply to dataset
+            applyBtn.disabled = true;
+            applyBtn.textContent = 'Applying...';
+            
+            try {
+                console.log('Applying system prompt with sessionId:', sessionId);
+                
+                const response = await fetch(`${API_URL}/add-system-prompt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        system_prompt: prompt
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('System prompt applied successfully:', data);
+                
+                // Update the stats display
+                if (data.stats) {
+                    showDatasetSummary(data.stats);
+                }
+                
+                // Show success message with download option
+                showSystemPromptSuccess(data.modified_count || 0, sessionId);
+                
+                // Hide the card
+                hideSystemPromptCard();
+                
+            } catch (error) {
+                console.error('Error applying system prompt:', error);
+                showError(error.message || 'Failed to apply system prompt');
+            } finally {
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Apply to Dataset';
+            }
+        });
+        applyBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+function generateSuggestedPrompts(stats) {
+    const prompts = [];
+    
+    // Based on conversation structure
+    const isMultiTurn = (stats.multi_turn_pct || 0) > 50;
+    const avgOutputTokens = Math.round((stats.avg_output_chars || 200) / 4);
+    
+    // General assistant
+    prompts.push({
+        label: 'General Assistant',
+        prompt: 'You are a helpful, accurate, and concise assistant. Answer questions directly and provide clear explanations when needed.'
+    });
+    
+    // Based on output length - classification vs generation
+    if (avgOutputTokens < 50) {
+        prompts.push({
+            label: 'Classification / Short Response',
+            prompt: 'You are a classification assistant. Analyze the input and provide a brief, accurate response. Be concise and direct.'
+            });
+        } else {
+        prompts.push({
+            label: 'Detailed Response',
+            prompt: 'You are an expert assistant. Provide thorough, well-structured responses. Include relevant details and examples when helpful.'
+        });
+    }
+    
+    // Multi-turn conversation
+    if (isMultiTurn) {
+        prompts.push({
+            label: 'Conversational',
+            prompt: 'You are a friendly conversational assistant. Maintain context across the conversation, ask clarifying questions when needed, and provide helpful responses.'
+        });
+    }
+    
+    // Q&A style
+    prompts.push({
+        label: 'Q&A Assistant',
+        prompt: 'You are a knowledgeable assistant that answers questions accurately. If you are unsure, say so. Provide sources or reasoning when appropriate.'
+    });
+    
+    return prompts;
+}
+
+function hideSystemPromptCard() {
+    const card = document.getElementById('systemPromptCard');
+    if (card) card.classList.add('hidden');
+}
+
+function showSystemPromptSuccess(modifiedCount, sessionId) {
+    // Create success banner
+    const successBanner = document.createElement('div');
+    successBanner.className = 'system-prompt-success';
+    successBanner.innerHTML = `
+        <div class="success-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>System prompt added to ${modifiedCount} conversations</span>
+        </div>
+        <a href="${API_URL}/download-dataset/${sessionId}" class="btn btn-secondary btn-small" target="_blank">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Updated Dataset
+        </a>
+    `;
+    
+    // Insert after the system prompt card
+    const promptCard = document.getElementById('systemPromptCard');
+    if (promptCard && promptCard.parentNode) {
+        promptCard.parentNode.insertBefore(successBanner, promptCard.nextSibling);
+        
+        // Auto-hide after 15 seconds
+            setTimeout(() => {
+            if (successBanner.parentNode) {
+                successBanner.remove();
+            }
+        }, 15000);
+    }
 }
 
 function clearFile() {
@@ -357,6 +605,7 @@ function clearFile() {
         summaryCard.classList.add('hidden');
         document.getElementById('summaryStatsGrid').innerHTML = '';
     }
+    hideSystemPromptCard();
     dropZone.style.display = '';
     continueBtn.disabled = true;
     hideError();
@@ -540,7 +789,7 @@ function displayRecommendation(data) {
             <div class="alt-header">
                 <span class="alt-name">${alt.model_name}</span>
                 <span class="alt-score">${Math.round((alt.score || 0) * 100)}%</span>
-            </div>
+        </div>
             <div class="alt-reasons">
                 ${(alt.reasons || []).slice(0, 2).map(r => `<span class="alt-reason">${r}</span>`).join('')}
             </div>
@@ -656,12 +905,12 @@ async function startCloudTraining() {
         
         // Switch to progress view
         document.getElementById('trainingOptions').classList.add('hidden');
-        document.getElementById('trainingProgress').classList.remove('hidden');
-        
+    document.getElementById('trainingProgress').classList.remove('hidden');
+    
         // Update job info
         document.getElementById('jobIdDisplay').textContent = jobId;
-        document.getElementById('startTimeDisplay').textContent = new Date().toLocaleTimeString();
-        
+    document.getElementById('startTimeDisplay').textContent = new Date().toLocaleTimeString();
+    
         // Start polling
         startStatusPolling();
         
@@ -683,13 +932,13 @@ function startStatusPolling() {
             const response = await fetch(`${API_URL}/train/status/${jobId}`);
             if (!response.ok) return;
             
-            const data = await response.json();
+        const data = await response.json();
             updateTrainingStatus(data);
             
             if (data.status === 'completed' || data.status === 'failed') {
                 clearInterval(statusPollInterval);
             }
-        } catch (error) {
+    } catch (error) {
             console.error('Status poll error:', error);
         }
     }, 3000);
@@ -702,9 +951,9 @@ function updateTrainingStatus(data) {
     statusDisplay.textContent = data.status;
     
     if (data.status === 'completed') {
-        document.getElementById('trainingProgress').classList.add('hidden');
-        document.getElementById('trainingComplete').classList.remove('hidden');
-        
+    document.getElementById('trainingProgress').classList.add('hidden');
+    document.getElementById('trainingComplete').classList.remove('hidden');
+    
         // Display metrics if available
         if (data.base_metrics && data.finetuned_metrics) {
             displayMetrics(data);
@@ -793,9 +1042,9 @@ generateBtn?.addEventListener('click', generatePackage);
 async function generatePackage() {
     if (!sessionId) {
         showError('No session. Please upload a file first.');
-        return;
-    }
-    
+            return;
+        }
+        
     generateBtn.disabled = true;
     generateBtn.querySelector('.btn-text').textContent = 'Generating...';
     generateBtn.querySelector('.btn-loader').classList.remove('hidden');
@@ -803,8 +1052,8 @@ async function generatePackage() {
     try {
         // Create plan first
         const planResponse = await fetch(`${API_URL}/plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 session_id: sessionId,
                 user_task: selectedTask,

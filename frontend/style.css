@@ -687,6 +687,232 @@ body {
 }
 
 /* ============================================================================
+   SYSTEM PROMPT CARD
+   ============================================================================ */
+
+.system-prompt-card {
+    margin-top: 20px;
+    background: var(--bg-elevated);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.system-prompt-card.hidden {
+    display: none;
+}
+
+.prompt-warning {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: rgba(245, 158, 11, 0.08);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+    color: var(--warning);
+    font-size: 13px;
+}
+
+.prompt-warning svg {
+    flex-shrink: 0;
+}
+
+.prompt-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.prompt-actions.hidden {
+    display: none;
+}
+
+.prompt-editor {
+    padding: 0;
+}
+
+.prompt-editor.hidden {
+    display: none;
+}
+
+.prompt-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+}
+
+.prompt-tab {
+    padding: 14px 20px;
+    background: none;
+    border: none;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all var(--duration) var(--ease);
+}
+
+.prompt-tab:hover {
+    color: var(--text-secondary);
+}
+
+.prompt-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.prompt-content {
+    padding: 20px;
+}
+
+.prompt-content.hidden {
+    display: none;
+}
+
+.suggested-prompts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.suggested-prompt-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--duration) var(--ease);
+    text-align: left;
+    font-family: var(--font-sans);
+}
+
+.suggested-prompt-option:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-hover);
+}
+
+.suggested-prompt-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+}
+
+.prompt-radio {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-strong);
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration) var(--ease);
+}
+
+.suggested-prompt-option.selected .prompt-radio {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.prompt-radio::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: white;
+    opacity: 0;
+    transition: opacity var(--duration) var(--ease);
+}
+
+.suggested-prompt-option.selected .prompt-radio::after {
+    opacity: 1;
+}
+
+.prompt-option-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.prompt-option-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.prompt-option-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    font-family: var(--font-mono);
+}
+
+.prompt-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    resize: vertical;
+    line-height: 1.6;
+}
+
+.prompt-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.prompt-textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.prompt-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.system-prompt-success {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    margin-top: 16px;
+    background: var(--success-muted);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: var(--radius-md);
+}
+
+.success-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 12px;
+}
+
+/* ============================================================================
    INFO CARDS - Better readability
    ============================================================================ */
 

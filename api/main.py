@@ -8,6 +8,7 @@ import os
 import sys
 import shutil
 import uuid
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -282,6 +283,7 @@ async def upload_file(file: UploadFile = File(...)):
     sessions[session_id] = {
         "file_path": file_path,
         "filename": file.filename,
+        "original_filename": file.filename,  # Store original for download
         "state": None,
         "created_at": datetime.now().isoformat(),
     }
@@ -399,6 +401,108 @@ async def recommend(request: RecommendRequest):
             "conversation_characteristics": conversation_chars,
         }
     }
+
+
+class AddSystemPromptRequest(BaseModel):
+    session_id: str
+    system_prompt: str
+
+
+@app.post("/add-system-prompt")
+async def add_system_prompt(request: AddSystemPromptRequest):
+    """
+    Add a system prompt to all conversations in the dataset.
+    """
+    session_id = request.session_id
+    system_prompt = request.system_prompt.strip()
+    
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if not system_prompt:
+        raise HTTPException(status_code=400, detail="System prompt cannot be empty")
+    
+    session = sessions[session_id]
+    state = session.get("state")
+    
+    if not state or not state.get("raw_data"):
+        raise HTTPException(status_code=400, detail="No data found. Please re-upload your file.")
+    
+    raw_data = state["raw_data"]
+    modified_count = 0
+    
+    # Add system prompt to each conversation
+    for entry in raw_data:
+        messages = entry.get("messages", [])
+        
+        # Check if already has a system prompt
+        has_system = any(msg.get("role") == "system" for msg in messages)
+        
+        if not has_system:
+            # Insert system prompt at the beginning
+            messages.insert(0, {
+                "role": "system",
+                "content": system_prompt
+            })
+            modified_count += 1
+    
+    # Save modified data back to file
+    file_path = session["file_path"]
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            for entry in raw_data:
+                f.write(json.dumps(entry) + '\n')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save modified data: {str(e)}")
+    
+    # Re-run ingestion to update stats
+    state["file_path"] = file_path
+    result = ingest_data(state)
+    state.update(result)
+    
+    if state.get("error_msg"):
+        raise HTTPException(status_code=400, detail=state["error_msg"])
+    
+    sessions[session_id]["state"] = state
+    
+    return {
+        "session_id": session_id,
+        "status": "success",
+        "message": f"Added system prompt to {modified_count} conversations",
+        "modified_count": modified_count,
+        "stats": state.get("stats", {})
+    }
+
+
+@app.get("/download-dataset/{session_id}")
+async def download_dataset(session_id: str):
+    """
+    Download the dataset file (with any modifications like system prompts).
+    """
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = sessions[session_id]
+    file_path = session.get("file_path")
+    
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Get original filename or generate one
+    original_filename = session.get("original_filename", "dataset.jsonl")
+    if not original_filename.endswith('.jsonl'):
+        original_filename = original_filename.rsplit('.', 1)[0] + '.jsonl'
+    
+    # Add suffix if modified
+    if session.get("state", {}).get("stats", {}).get("has_system_prompts"):
+        name, ext = os.path.splitext(original_filename)
+        original_filename = f"{name}_with_system_prompt{ext}"
+    
+    return FileResponse(
+        path=file_path,
+        filename=original_filename,
+        media_type='application/jsonl'
+    )
 
 
 @app.post("/analyze")
