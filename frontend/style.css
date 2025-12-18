@@ -555,6 +555,140 @@ body {
     color: var(--text-tertiary);
 }
 
+/* Dataset Summary Card */
+.dataset-summary-card {
+    margin-top: 20px;
+    padding: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.dataset-summary-card.hidden {
+    display: none;
+}
+
+.summary-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    padding: 16px 20px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-header svg {
+    color: var(--accent);
+}
+
+.summary-stats-grid {
+    padding: 0;
+}
+
+/* Primary stats - top row */
+.stats-primary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--border);
+}
+
+.primary-stat {
+    padding: 20px 16px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+}
+
+.primary-stat:last-child {
+    border-right: none;
+}
+
+.primary-value {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.primary-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* Detail rows */
+.stats-details {
+    padding: 0;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.detail-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.quality-badge {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.quality-badge.success {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.quality-badge.accent {
+    background: var(--accent-muted);
+    color: var(--accent);
+}
+
+.quality-badge.warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning);
+}
+
+/* Warnings */
+.stats-warnings {
+    background: rgba(245, 158, 11, 0.05);
+    border-top: 1px solid rgba(245, 158, 11, 0.2);
+    padding: 12px 20px;
+}
+
+.warning-item {
+    font-size: 12px;
+    color: var(--warning);
+    padding: 4px 0;
+}
+
 /* ============================================================================
    INFO CARDS - Better readability
    ============================================================================ */
@@ -1432,5 +1566,18 @@ body {
     
     .training-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .stats-primary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .primary-stat:nth-child(2) {
+        border-right: none;
+    }
+    
+    .primary-stat:nth-child(1),
+    .primary-stat:nth-child(2) {
+        border-bottom: 1px solid var(--border);
     }
 }

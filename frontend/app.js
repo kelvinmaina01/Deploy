@@ -249,21 +249,10 @@ function showValidationStatus(stats) {
     const validationTitle = document.getElementById('validationTitle');
     const validationMeta = document.getElementById('validationMeta');
     
-    let metaItems = [];
-    
-    if (stats.total_messages) {
-        metaItems.push(`${stats.total_messages.toLocaleString()} messages`);
-    }
-    if (stats.avg_messages_per_example) {
-        metaItems.push(`~${stats.avg_messages_per_example} per example`);
-    }
-    if (stats.has_system_prompts) {
-        metaItems.push('Has system prompts');
-    }
-    
+    // Simple validation status - detailed info goes to summary card
     validationIcon.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    validationTitle.textContent = 'Valid JSONL Format';
-    validationMeta.textContent = metaItems.join(' • ');
+    validationTitle.textContent = 'Format Validated';
+    validationMeta.textContent = 'Dataset ready for analysis';
     
     // Show warnings if any
     if (stats.warnings && stats.warnings.length > 0) {
@@ -273,6 +262,88 @@ function showValidationStatus(stats) {
     }
     
     validationStatus.classList.remove('hidden');
+    
+    // Show dataset summary with all the details
+    showDatasetSummary(stats);
+}
+
+function showDatasetSummary(stats) {
+    const summaryCard = document.getElementById('datasetSummaryCard');
+    const statsGrid = document.getElementById('summaryStatsGrid');
+    
+    if (!stats || !summaryCard) return;
+    
+    // Build clean stats table
+    let html = '';
+    
+    // Primary metrics row
+    html += '<div class="stats-primary">';
+    html += `<div class="primary-stat">
+        <span class="primary-value">${(stats.total_tokens || 0).toLocaleString()}</span>
+        <span class="primary-label">Total Tokens</span>
+    </div>`;
+    html += `<div class="primary-stat">
+        <span class="primary-value">${stats.avg_tokens_per_example || 0}</span>
+        <span class="primary-label">Avg Tokens/Example</span>
+    </div>`;
+    html += `<div class="primary-stat">
+        <span class="primary-value">~${stats.est_training_time_min || 3} min</span>
+        <span class="primary-label">Est. Training Time</span>
+    </div>`;
+    html += `<div class="primary-stat">
+        <span class="primary-value">$${stats.est_cost_usd || '0.15'}</span>
+        <span class="primary-label">Est. Cost</span>
+    </div>`;
+    html += '</div>';
+    
+    // Secondary details
+    html += '<div class="stats-details">';
+    
+    // Conversation type
+    const singlePct = stats.single_turn_pct || 0;
+    const multiPct = stats.multi_turn_pct || 0;
+    html += `<div class="detail-row">
+        <span class="detail-label">Conversation Type</span>
+        <span class="detail-value">${singlePct}% single-turn, ${multiPct}% multi-turn</span>
+    </div>`;
+    
+    // System prompts
+    const sysPct = stats.system_prompt_pct || 0;
+    html += `<div class="detail-row">
+        <span class="detail-label">System Prompts</span>
+        <span class="detail-value">${sysPct > 0 ? sysPct + '% of examples' : 'None'}</span>
+    </div>`;
+    
+    // Response length
+    const avgOutput = stats.avg_output_chars || 0;
+    const outputTokens = Math.round(avgOutput / 4);
+    html += `<div class="detail-row">
+        <span class="detail-label">Avg Response Length</span>
+        <span class="detail-value">~${outputTokens} tokens</span>
+    </div>`;
+    
+    // Quality indicator
+    const quality = stats.quality || 'good';
+    const qualityLabel = quality === 'excellent' ? 'Excellent' : quality === 'good' ? 'Good' : 'Minimal';
+    const qualityClass = quality === 'excellent' ? 'success' : quality === 'good' ? 'accent' : 'warning';
+    html += `<div class="detail-row">
+        <span class="detail-label">Dataset Quality</span>
+        <span class="detail-value quality-badge ${qualityClass}">${qualityLabel}</span>
+    </div>`;
+    
+    html += '</div>';
+    
+    // Warnings if any
+    if (stats.warnings && stats.warnings.length > 0) {
+        html += '<div class="stats-warnings">';
+        stats.warnings.forEach(w => {
+            html += `<div class="warning-item">⚠️ ${w}</div>`;
+        });
+        html += '</div>';
+    }
+    
+    statsGrid.innerHTML = html;
+    summaryCard.classList.remove('hidden');
 }
 
 function clearFile() {
@@ -281,6 +352,11 @@ function clearFile() {
     fileInput.value = '';
     fileInfo.classList.add('hidden');
     validationStatus.classList.add('hidden');
+    const summaryCard = document.getElementById('datasetSummaryCard');
+    if (summaryCard) {
+        summaryCard.classList.add('hidden');
+        document.getElementById('summaryStatsGrid').innerHTML = '';
+    }
     dropZone.style.display = '';
     continueBtn.disabled = true;
     hideError();

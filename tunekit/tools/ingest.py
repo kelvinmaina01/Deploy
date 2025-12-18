@@ -183,42 +183,113 @@ def ingest_data(state: "TuneKitState") -> dict:
         if num_rows < MIN_EXAMPLES:
             return err(f"Need at least {MIN_EXAMPLES} examples for fine-tuning. Found only {num_rows}.")
         
-        # Calculate statistics
-        total_messages = sum(len(entry["messages"]) for entry in raw_data)
-        avg_messages = total_messages / num_rows
+        # =====================================================================
+        # CALCULATE COMPREHENSIVE STATISTICS
+        # =====================================================================
         
-        has_system = any(
-            any(msg["role"] == "system" for msg in entry["messages"])
-            for entry in raw_data
-        )
+        total_messages = 0
+        system_count = 0
+        user_messages = 0
+        assistant_messages = 0
+        single_turn_count = 0
+        multi_turn_count = 0
         
-        # Sample content lengths
-        sample_lengths = []
-        for entry in raw_data[:100]:
-            total_len = sum(len(msg["content"]) for msg in entry["messages"])
-            sample_lengths.append(total_len)
-        avg_length = sum(sample_lengths) / len(sample_lengths) if sample_lengths else 0
+        all_user_lengths = []
+        all_assistant_lengths = []
+        all_conversation_chars = []
         
-        # Check for very long conversations (token limit warning)
+        for entry in raw_data:
+            messages = entry["messages"]
+            total_messages += len(messages)
+            
+            # Count by role
+            user_count = 0
+            asst_count = 0
+            conv_chars = 0
+            
+            for msg in messages:
+                role = msg["role"]
+                content_len = len(msg["content"])
+                conv_chars += content_len
+                
+                if role == "system":
+                    system_count += 1
+                elif role == "user":
+                    user_count += 1
+                    user_messages += 1
+                    all_user_lengths.append(content_len)
+                elif role == "assistant":
+                    asst_count += 1
+                    assistant_messages += 1
+                    all_assistant_lengths.append(content_len)
+            
+            all_conversation_chars.append(conv_chars)
+            
+            # Single-turn = 1 user + 1 assistant (no multi-turn)
+            if user_count == 1 and asst_count == 1:
+                single_turn_count += 1
+            else:
+                multi_turn_count += 1
+        
+        # Token estimation (rough: 1 token ≈ 4 chars for English)
+        total_chars = sum(all_conversation_chars)
+        estimated_tokens = total_chars // 4
+        avg_tokens_per_example = estimated_tokens // num_rows if num_rows > 0 else 0
+        
+        # Response length stats
+        avg_user_len = sum(all_user_lengths) // len(all_user_lengths) if all_user_lengths else 0
+        avg_assistant_len = sum(all_assistant_lengths) // len(all_assistant_lengths) if all_assistant_lengths else 0
+        
+        # Training estimates (rough calculations)
+        # Based on typical fine-tuning costs and times
+        tokens_per_minute = 50000  # rough estimate for A10G
+        est_training_time_min = max(3, (estimated_tokens * 3) // tokens_per_minute)  # 3 epochs
+        est_cost_usd = round(0.001 * (estimated_tokens // 1000) * 3, 2)  # rough modal cost
+        
+        # Warnings
         warnings: List[str] = []
-        if avg_length > 8000:
-            warnings.append("⚠️ Very long conversations - may hit token limits during training")
+        if avg_tokens_per_example > 2000:
+            warnings.append("Long conversations may require truncation")
+        if num_rows < 100:
+            warnings.append("More examples recommended for better results")
+        if system_count == 0 and num_rows > 100:
+            warnings.append("Consider adding system prompts for better control")
+        
+        # Quality assessment
+        quality = "excellent" if num_rows >= 500 and avg_assistant_len > 50 else \
+                  "good" if num_rows >= 100 else "minimal"
         
         stats = {
+            # Core counts
             "total_examples": num_rows,
-            "total_messages": total_messages,
-            "avg_messages_per_example": round(avg_messages, 1),
-            "has_system_prompts": has_system,
-            "avg_conversation_length": round(avg_length),
+            "total_tokens": estimated_tokens,
+            "avg_tokens_per_example": avg_tokens_per_example,
+            
+            # Structure
+            "single_turn_pct": round(100 * single_turn_count / num_rows) if num_rows > 0 else 0,
+            "multi_turn_pct": round(100 * multi_turn_count / num_rows) if num_rows > 0 else 0,
+            "has_system_prompts": system_count > 0,
+            "system_prompt_pct": round(100 * system_count / num_rows) if num_rows > 0 else 0,
+            
+            # Content
+            "avg_input_chars": avg_user_len,
+            "avg_output_chars": avg_assistant_len,
+            
+            # Training estimates
+            "est_training_time_min": est_training_time_min,
+            "est_cost_usd": max(0.15, est_cost_usd),
+            
+            # Quality
+            "quality": quality,
             "warnings": warnings,
         }
         
-        print(f"✅ Loaded {num_rows} conversations")
-        print(f"📊 {total_messages} total messages ({avg_messages:.1f} avg per example)")
-        print(f"💬 System prompts: {'Yes' if has_system else 'No'}")
+        print(f"✅ Loaded {num_rows} conversations ({estimated_tokens:,} tokens)")
+        print(f"📊 {stats['single_turn_pct']}% single-turn, {stats['multi_turn_pct']}% multi-turn")
+        print(f"⏱️  Est. training: ~{est_training_time_min} min, ~${stats['est_cost_usd']}")
         if warnings:
             for w in warnings:
-                print(f"   {w}")
+                print(f"   ⚠️ {w}")
         
         return {
             "raw_data": raw_data,

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=36">
+    <link rel="stylesheet" href="/static/style.css?v=39">
 </head>
 <body>
     <div class="app-wrapper">
@@ -123,6 +123,21 @@
                                 <div class="validation-details">
                                     <div class="validation-title" id="validationTitle">Format Validated</div>
                                     <div class="validation-meta" id="validationMeta"></div>
+                                </div>
+                            </div>
+
+                            <!-- Dataset Summary Card -->
+                            <div class="dataset-summary-card hidden" id="datasetSummaryCard">
+                                <div class="summary-header">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                                    </svg>
+                                    <span>Analysis</span>
+                                </div>
+                                <div class="summary-stats-grid" id="summaryStatsGrid">
+                                    <!-- Stats populated by JavaScript -->
                                 </div>
                             </div>
                         </div>
@@ -560,6 +575,6 @@
         </main>
     </div>
 
-    <script src="/static/app.js?v=36"></script>
+    <script src="/static/app.js?v=39"></script>
 </body>
 </html>
