@@ -25,8 +25,8 @@ from tunekit import (
     ingest_data,
     validate_quality,
     analyze_dataset,
-    planning_agent,
     generate_package,
+    recommend_model,
 )
 from tunekit.training import (
     start_training,
@@ -78,12 +78,16 @@ class AnalyzeRequest(BaseModel):
     user_description: str
 
 
+class RecommendRequest(BaseModel):
+    session_id: str
+    user_task: str  # classify, qa, conversation, generation, extraction
+    deployment_target: str = 'not_sure'  # cloud_api, mobile_app, edge_device, web_browser, desktop_app, not_sure
+
+
 class PlanRequest(BaseModel):
     session_id: str
-    # User can override detected columns
-    input_column: Optional[str] = None
-    output_column: Optional[str] = None
-    task_type: Optional[str] = None  # User can override task type too
+    user_task: Optional[str] = None  # classify, qa, conversation, generation, extraction
+    deployment_target: Optional[str] = None  # cloud_api, mobile_app, etc.
 
 
 class GenerateRequest(BaseModel):
@@ -94,6 +98,8 @@ class SessionResponse(BaseModel):
     session_id: str
     status: str
     message: str
+    rows: Optional[int] = 0
+    stats: Optional[dict] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -244,8 +250,8 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid filename")
     
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in [".csv", ".json", ".jsonl"]:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Use .csv, .json, or .jsonl")
+    if ext != ".jsonl":
+        raise HTTPException(status_code=400, detail="Only JSONL format is supported. Please upload a .jsonl file.")
     
     # File size limit (100MB)
     MAX_FILE_SIZE = 100 * 1024 * 1024
@@ -280,17 +286,68 @@ async def upload_file(file: UploadFile = File(...)):
         "created_at": datetime.now().isoformat(),
     }
     
-    return SessionResponse(
-        session_id=session_id,
-        status="uploaded",
-        message=f"File '{file.filename}' uploaded successfully",
-    )
+    # Run initial ingestion to validate format and get stats
+    try:
+        state = create_empty_state(file_path, "")
+        result = ingest_data(state)
+        state.update(result)
+        
+        print(f"[Upload] Ingest result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
+        print(f"[Upload] State num_rows: {state.get('num_rows')}")
+        print(f"[Upload] State stats: {state.get('stats')}")
+        
+        if state.get("error_msg"):
+            # Clean up file on error
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            del sessions[session_id]
+            raise HTTPException(status_code=400, detail=state["error_msg"])
+        
+        # Store state with ingestion results
+        sessions[session_id]["state"] = state
+        
+        # Get number of rows/examples - check both num_rows and stats
+        num_rows = state.get("num_rows")
+        stats = state.get("stats", {})
+        
+        print(f"[Upload] After state update - num_rows: {num_rows}, type: {type(num_rows)}")
+        print(f"[Upload] Stats total_examples: {stats.get('total_examples') if stats else 'no stats'}")
+        
+        # If num_rows is None or 0, try to get from stats
+        if not num_rows or num_rows == 0:
+            if stats and stats.get("total_examples"):
+                num_rows = stats.get("total_examples")
+                print(f"[Upload] Using total_examples from stats: {num_rows}")
+        
+        # Ensure it's an integer
+        num_rows = int(num_rows) if num_rows else 0
+        
+        print(f"[Upload] Final num_rows: {num_rows} for session {session_id}")
+        
+        return {
+            "session_id": session_id,
+            "status": "uploaded",
+            "message": f"File '{file.filename}' uploaded successfully",
+            "rows": num_rows,
+            "stats": stats,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if session_id in sessions:
+            del sessions[session_id]
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
 
-@app.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(request: AnalyzeRequest):
+@app.post("/recommend")
+async def recommend(request: RecommendRequest):
     """
-    Run ingestion, validation, and analysis on the uploaded file.
+    Analyze dataset and recommend the best model based on user task and deployment target.
+    
+    Flow: Upload → Recommend (validate + analyze + recommend)
     """
     session_id = request.session_id
     
@@ -298,17 +355,73 @@ async def analyze(request: AnalyzeRequest):
         raise HTTPException(status_code=404, detail="Session not found. Upload a file first.")
     
     session = sessions[session_id]
-    file_path = session["file_path"]
+    state = session.get("state")
     
-    # Create state
-    state = create_empty_state(file_path, request.user_description)
+    if not state:
+        raise HTTPException(status_code=400, detail="No data found. Please re-upload your file.")
     
-    # Step 1: Ingest
-    result = ingest_data(state)
-    state.update(result)
+    # Step 1: Validate quality (if not already done)
+    if state.get("quality_score") is None:
+        result = validate_quality(state)
+        state.update(result)
     
-    if state.get("error_msg"):
-        raise HTTPException(status_code=400, detail=state["error_msg"])
+    # Step 2: Analyze dataset (if not already done)
+    if state.get("conversation_characteristics") is None:
+        result = analyze_dataset(state)
+        state.update(result)
+    
+    # Step 3: Get model recommendation
+    conversation_chars = state.get("conversation_characteristics", {})
+    num_examples = state.get("num_rows", 0)
+    
+    recommendation = recommend_model(
+        user_task=request.user_task,
+        conversation_characteristics=conversation_chars,
+        num_examples=num_examples,
+        deployment_target=request.deployment_target
+    )
+    
+    # Store user selections in state
+    state["user_task"] = request.user_task
+    state["deployment_target"] = request.deployment_target
+    state["recommendation"] = recommendation
+    
+    # Save updated state
+    sessions[session_id]["state"] = state
+    
+    return {
+        "session_id": session_id,
+        "recommendation": recommendation,
+        "analysis": {
+            "stats": state.get("stats", {}),
+            "quality_score": state.get("quality_score", 0),
+            "quality_issues": state.get("quality_issues", []),
+            "conversation_characteristics": conversation_chars,
+        }
+    }
+
+
+@app.post("/analyze")
+async def analyze(request: AnalyzeRequest):
+    """
+    Legacy endpoint - Run ingestion, validation, and analysis on the uploaded file.
+    """
+    session_id = request.session_id
+    
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found. Upload a file first.")
+    
+    session = sessions[session_id]
+    state = session.get("state")
+    
+    if not state:
+        file_path = session["file_path"]
+        state = create_empty_state(file_path, request.user_description)
+        result = ingest_data(state)
+        state.update(result)
+        
+        if state.get("error_msg"):
+            raise HTTPException(status_code=400, detail=state["error_msg"])
     
     # Step 2: Validate
     result = validate_quality(state)
@@ -321,18 +434,14 @@ async def analyze(request: AnalyzeRequest):
     # Save state to session
     sessions[session_id]["state"] = state
     
-    return AnalyzeResponse(
-        session_id=session_id,
-        num_rows=state["num_rows"],
-        columns=state["columns"],
-        quality_score=state["quality_score"],
-        quality_issues=state["quality_issues"],
-        inferred_task_type=state["inferred_task_type"],
-        task_confidence=state["task_confidence"],
-        num_classes=state.get("num_classes"),
-        column_candidates=state["column_candidates"],
-        sample_rows=state.get("sample_rows", [])[:5],  # First 5 rows
-    )
+    return {
+        "session_id": session_id,
+        "num_rows": state.get("num_rows", 0),
+        "quality_score": state.get("quality_score", 0),
+        "quality_issues": state.get("quality_issues", []),
+        "conversation_characteristics": state.get("conversation_characteristics", {}),
+        "stats": state.get("stats", {}),
+    }
 
 
 @app.get("/sample-data/{session_id}")
@@ -388,10 +497,11 @@ async def get_sample_data(session_id: str, limit: int = 100):
         raise HTTPException(status_code=500, detail=f"Error reading data: {str(e)}")
 
 
-@app.post("/plan", response_model=PlanResponse)
+@app.post("/plan")
 async def plan(request: PlanRequest):
     """
-    Run the planning agent to decide task type, model, and config.
+    Create training plan based on recommendation.
+    Uses the model from the recommendation step.
     """
     session_id = request.session_id
     
@@ -402,97 +512,60 @@ async def plan(request: PlanRequest):
     state = session.get("state")
     
     if not state:
-        raise HTTPException(status_code=400, detail="Run /analyze first")
+        raise HTTPException(status_code=400, detail="Run /recommend first")
     
-    # Apply user overrides if provided
-    if request.input_column or request.output_column:
-        # User has configured columns - update column_candidates
-        column_candidates = state.get("column_candidates", {})
-        
-        if request.input_column:
-            # Update text_column for classification, instruction_column for instruction tuning
-            if "text_column" in column_candidates:
-                column_candidates["text_column"] = [request.input_column]
-            elif "instruction_column" in column_candidates:
-                column_candidates["instruction_column"] = [request.input_column]
-            else:
-                column_candidates["text_column"] = [request.input_column]
-        
-        if request.output_column:
-            # Update label_column for classification, tags_column for NER, response_column for instruction
-            if "label_column" in column_candidates:
-                column_candidates["label_column"] = [request.output_column]
-            elif "tags_column" in column_candidates:
-                column_candidates["tags_column"] = [request.output_column]
-            elif "response_column" in column_candidates:
-                column_candidates["response_column"] = [request.output_column]
-            else:
-                column_candidates["label_column"] = [request.output_column]
-        
-        state["column_candidates"] = column_candidates
-        print(f"[Plan] User overrides applied: input={request.input_column}, output={request.output_column}")
+    # Get recommendation from state
+    recommendation = state.get("recommendation", {})
+    primary_rec = recommendation.get("primary_recommendation", {})
     
-    if request.task_type:
-        # User explicitly changed task type
-        state["inferred_task_type"] = request.task_type
-        state["task_confidence"] = 1.0  # User override = full confidence
-        print(f"[Plan] User task type override: {request.task_type}")
+    if not primary_rec:
+        raise HTTPException(status_code=400, detail="No recommendation found. Run /recommend first.")
     
-    # Run planning agent
-    result = planning_agent(state)
-    state.update(result)
+    # Apply user task and deployment target if provided
+    user_task = request.user_task or state.get("user_task", "conversation")
+    deployment_target = request.deployment_target or state.get("deployment_target", "not_sure")
     
-    # IMPORTANT: Apply user overrides AFTER planning agent
-    # This ensures user's explicit choices take precedence over LLM decisions
-    user_override_applied = False
+    # Set up training configuration based on recommendation
+    model_id = primary_rec.get("model_id", "microsoft/Phi-4-mini-instruct")
     
-    if request.task_type:
-        state["final_task_type"] = request.task_type
-        user_override_applied = True
-        print(f"[Plan] User override: task_type = {request.task_type}")
+    state["final_task_type"] = user_task
+    state["base_model"] = model_id
+    state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {primary_rec.get('model_name', 'Phi-4 Mini')}."
     
-    if request.input_column or request.output_column:
-        training_config = state.get("training_config", {})
-        
-        if request.input_column:
-            # Update the appropriate column in training config based on task type
-            task_type = state.get("final_task_type", "classification")
-            if task_type == "classification":
-                training_config["text_column"] = request.input_column
-            elif task_type == "ner":
-                training_config["text_column"] = request.input_column
-            elif task_type == "instruction_tuning":
-                training_config["instruction_column"] = request.input_column
-            print(f"[Plan] User override: input_column = {request.input_column}")
-        
-        if request.output_column:
-            task_type = state.get("final_task_type", "classification")
-            if task_type == "classification":
-                training_config["label_column"] = request.output_column
-            elif task_type == "ner":
-                training_config["tags_column"] = request.output_column
-            elif task_type == "instruction_tuning":
-                training_config["response_column"] = request.output_column
-            print(f"[Plan] User override: output_column = {request.output_column}")
-        
-        state["training_config"] = training_config
-        user_override_applied = True
-    
-    if user_override_applied:
-        # Update reasoning to reflect user overrides
-        original_reasoning = state.get("planning_reasoning", "")
-        state["planning_reasoning"] = f"{original_reasoning}\n\n[User Override Applied: Using manually configured columns/task type]"
+    # Create training config for chat-based fine-tuning with LoRA
+    state["training_config"] = {
+        "model_name": model_id,
+        "task_type": "chat",
+        "training_args": {
+            "num_train_epochs": 3,
+            "per_device_train_batch_size": 4,
+            "gradient_accumulation_steps": 4,
+            "learning_rate": 2e-4,
+            "fp16": True,
+            "logging_steps": 10,
+            "save_strategy": "epoch",
+            "warmup_ratio": 0.1,
+        },
+        "lora_config": {
+            "r": 16,
+            "lora_alpha": 32,
+            "lora_dropout": 0.05,
+            "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
+        },
+        "est_time_minutes": primary_rec.get("training_time_min", 5),
+        "est_cost_usd": primary_rec.get("cost_usd", 0.20),
+    }
     
     # Save updated state
     sessions[session_id]["state"] = state
     
-    return PlanResponse(
-        session_id=session_id,
-        final_task_type=state["final_task_type"],
-        base_model=state["base_model"],
-        reasoning=state["planning_reasoning"],
-        training_config=state["training_config"],
-    )
+    return {
+        "session_id": session_id,
+        "final_task_type": state["final_task_type"],
+        "base_model": state["base_model"],
+        "reasoning": state["planning_reasoning"],
+        "training_config": state["training_config"],
+    }
 
 
 @app.post("/generate", response_model=GenerateResponse)

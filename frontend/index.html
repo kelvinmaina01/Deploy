@@ -7,380 +7,559 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=36">
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-center">
+    <div class="app-wrapper">
+        <!-- Top Navigation -->
+        <header class="top-nav">
+            <div class="nav-container">
                 <a href="/" class="logo">
+                    <div class="logo-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </div>
                     <span class="logo-text">TuneKit</span>
                 </a>
-                <p class="tagline">Fine-Tune AI Models in Minutes</p>
+                
+                <nav class="nav-steps">
+                    <a href="#" class="nav-step active" data-step="1">
+                        <span class="step-indicator">1</span>
+                        <span class="step-label">Upload Data</span>
+                    </a>
+                    <div class="step-connector"></div>
+                    <a href="#" class="nav-step" data-step="2">
+                        <span class="step-indicator">2</span>
+                        <span class="step-label">Configure</span>
+                    </a>
+                    <div class="step-connector"></div>
+                    <a href="#" class="nav-step" data-step="3">
+                        <span class="step-indicator">3</span>
+                        <span class="step-label">Recommendation</span>
+                    </a>
+                    <div class="step-connector"></div>
+                    <a href="#" class="nav-step" data-step="4">
+                        <span class="step-indicator">4</span>
+                        <span class="step-label">Training</span>
+                    </a>
+                </nav>
+
+                <div class="nav-actions">
+                    <a href="https://github.com/yourusername/tunekit" class="nav-link" target="_blank">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </a>
+                </div>
             </div>
         </header>
 
-        <!-- Main Content -->
-        <main class="main">
+        <!-- Main Content Area -->
+        <main class="main-content">
             <!-- Step 1: Upload Dataset -->
-            <section class="card step-content active" id="step1">
-                <h2>📤 Upload Training Data</h2>
-                
-                <div class="upload-section">
-                    <!-- Drop Zone -->
-                    <div class="upload-zone" id="dropZone">
-                        <p class="upload-main">Drop JSONL file here</p>
-                        <p class="upload-sub">or click to browse</p>
-                        <p class="upload-formats">Accepted: .jsonl, .json, .parquet</p>
-                        <input type="file" id="fileInput" accept=".jsonl,.json,.parquet" hidden>
-                    </div>
-                    
-                    <!-- File Info (shown after upload) -->
-                    <div class="file-info hidden" id="fileInfo">
-                        <div class="file-icon">📄</div>
-                        <div class="file-details">
-                            <div class="file-name" id="fileName"></div>
-                            <div class="file-meta">
-                                <span class="success" id="fileRows">✓ -- examples</span>
-                                <span id="fileSize">-- KB</span>
+            <section class="step-content active" id="step1">
+                <div class="content-header">
+                    <div class="header-badge">Step 1</div>
+                    <h1>Upload Training Data</h1>
+                    <p>Import your JSONL dataset to begin fine-tuning</p>
+                </div>
+
+                <div class="content-grid">
+                    <!-- Main Upload Area -->
+                    <div class="content-main">
+                        <div class="card upload-card">
+                            <div class="upload-zone" id="dropZone">
+                                <div class="upload-visual">
+                                    <div class="upload-icon-bg">
+                                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="upload-text">
+                                    <span class="upload-main">Drop your JSONL file here</span>
+                                    <span class="upload-sub">or <span class="upload-browse">browse files</span></span>
+                                </div>
+                                <input type="file" id="fileInput" accept=".jsonl" hidden>
+                            </div>
+                            
+                            <div class="file-info hidden" id="fileInfo">
+                                <div class="file-icon-wrapper">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="file-details">
+                                    <div class="file-name" id="fileName">dataset.jsonl</div>
+                                    <div class="file-meta">
+                                        <span class="file-stat success" id="fileRows">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                            -- examples
+                                        </span>
+                                        <span class="file-stat" id="fileSize">-- KB</span>
+                                    </div>
+                                </div>
+                                <button class="btn-remove" id="removeFile" title="Remove file">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div class="validation-status hidden" id="validationStatus">
+                                <div class="validation-icon" id="validationIcon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="validation-details">
+                                    <div class="validation-title" id="validationTitle">Format Validated</div>
+                                    <div class="validation-meta" id="validationMeta"></div>
+                                </div>
                             </div>
                         </div>
-                        <button class="btn-icon danger" id="removeFile" title="Remove">✕</button>
-                    </div>
-                </div>
 
-                <!-- Help Section -->
-                <div class="help-section">
-                    <div class="help-row">
-                        <span class="help-icon">ℹ️</span>
-                        <span>Need help formatting your data?</span>
-                    </div>
-                    <div class="help-row">
-                        <span class="help-icon">📥</span>
-                        <a href="#" id="downloadExamples">Download example datasets</a>
-                    </div>
-                </div>
-
-                <!-- Example Datasets -->
-                <div class="examples-section">
-                    <p class="examples-label">Examples:</p>
-                    <ul class="examples-list">
-                        <li><a href="#" class="example-link" data-example="sentiment">Sentiment classification (100 samples)</a></li>
-                        <li><a href="#" class="example-link" data-example="qa">Question answering (100 samples)</a></li>
-                        <li><a href="#" class="example-link" data-example="instructions">Custom instructions (100 samples)</a></li>
-                    </ul>
-                </div>
-
-                <!-- Format Requirements Link -->
-                <div class="format-link">
-                    <a href="#" id="viewFormatRequirements">📖 View format requirements →</a>
-                </div>
-
-                <!-- Requirements Section -->
-                <div class="requirements-section" id="requirementsSection">
-                    <p class="requirements-title">Requirements:</p>
-                    <ul class="requirements-list">
-                        <li>✓ JSONL format with "messages" structure</li>
-                        <li>✓ Minimum 50 examples (100-1000 recommended)</li>
-                        <li>✓ Each message needs "role" and "content"</li>
-                    </ul>
-                </div>
-
-                <!-- Continue Button -->
-                <div class="action-bar">
-                    <button class="btn btn-primary btn-large" id="continueBtn" disabled>
-                        <span class="btn-text">Continue →</span>
-                        <span class="btn-loader hidden"></span>
-                    </button>
-                </div>
-            </section>
-
-            <!-- Step 2: Planning Results -->
-            <section class="card step-content" id="step2">
-                <h2>Planning Complete</h2>
-                <p class="subtitle">Our AI has analyzed your data and created a training plan. Here's what I recommend:</p>
-                
-                <!-- Main Info Grid -->
-                <div class="plan-info-grid">
-                    <div class="plan-info-item">
-                        <span class="info-label">Task Type</span>
-                        <span class="info-value" id="planTask">-</span>
-                        <span class="info-meta" id="planClasses"></span>
-                    </div>
-                    <div class="plan-info-item">
-                        <span class="info-label">Base Model</span>
-                        <span class="info-value" id="planModel">-</span>
-                        <span class="info-meta" id="planConfidence"></span>
-                    </div>
-                    <div class="plan-info-item">
-                        <span class="info-label">Strategy</span>
-                        <span class="info-value" id="planStrategy">-</span>
-                        <span class="info-meta" id="planStrategyMeta"></span>
-                    </div>
-                </div>
-
-                <!-- What Happens Next -->
-                <div class="plan-section">
-                    <h3>What Happens Next</h3>
-                    <div class="timeline-simple">
-                        <div class="timeline-item">
-                            <div class="timeline-number">1</div>
-                            <div class="timeline-text">
-                                <strong>Load Model <span class="time-est">(~30s)</span></strong>
-                                <p>Download pre-trained model and initialize weights</p>
+                        <!-- Error Display -->
+                        <div class="error-banner hidden" id="errorBanner">
+                            <div class="error-content">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                                <span class="error-text" id="errorText"></span>
                             </div>
-                        </div>
-                        <div class="timeline-item">
-                            <div class="timeline-number">2</div>
-                            <div class="timeline-text">
-                                <strong>Train on Your Data <span class="time-est" id="trainTime">(~3 min)</span></strong>
-                                <p>Fine-tune the model using your specific dataset</p>
-                            </div>
-                        </div>
-                        <div class="timeline-item">
-                            <div class="timeline-number">3</div>
-                            <div class="timeline-text">
-                                <strong>Validate & Save <span class="time-est">(~20s)</span></strong>
-                                <p>Run evaluation checks and save the refined model</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="timeline-summary">
-                        <strong>Total estimated time: <span id="totalTime">~4 minutes</span></strong>
-                        <p class="timeline-note">Time may vary based on GPU availability and dataset size</p>
-                    </div>
-                </div>
-
-                <!-- Training Configuration -->
-                <div class="plan-section">
-                    <h3>Training Configuration</h3>
-                    <div class="config-grid-simple" id="configGrid">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-
-                <!-- Agent Reasoning -->
-                <div class="plan-section">
-                    <div class="reasoning-header">
-                        <h3>Agent Reasoning</h3>
-                        <button class="btn btn-ghost btn-sm" id="viewReasoningBtn">View Full</button>
-                    </div>
-                    <p class="reasoning-preview" id="planReasoning"></p>
-                </div>
-
-                <!-- Reasoning Modal (hidden by default) -->
-                <div class="reasoning-modal hidden" id="reasoningModal">
-                    <div class="reasoning-modal-content">
-                        <div class="reasoning-modal-header">
-                            <h3>🧠 Agent Reasoning</h3>
-                            <button class="modal-close" id="closeReasoningBtn">✕</button>
-                        </div>
-                        <div class="reasoning-text" id="planReasoningFull"></div>
-                    </div>
-                </div>
-
-                <div class="button-group plan-actions">
-                    <button class="btn btn-secondary" id="backToUpload">← Back to Upload</button>
-                    <button class="btn btn-primary btn-large" id="continueToTrainBtn">
-                        Start Training →
-                    </button>
-                </div>
-            </section>
-
-            <!-- Step 3: Train - Side by Side -->
-            <section class="card step-content" id="step3">
-                <h2>🚀 Start Training</h2>
-                <p class="subtitle">Choose how you want to train your model</p>
-
-                <div class="train-options">
-                    <!-- Cloud Training -->
-                    <div class="train-option train-cloud">
-                        <div class="train-option-icon">☁️</div>
-                        <div class="train-option-content">
-                            <h3>Train on Cloud</h3>
-                            <p>Run training on Modal's GPU servers. No setup required!</p>
-                            <ul class="train-features">
-                                <li>✓ T4/A10G GPUs available</li>
-                                <li>✓ Pay only for compute time</li>
-                                <li>✓ Download trained model when done</li>
-                            </ul>
-                            <button class="btn btn-primary" id="trainCloudBtn">
-                                <span class="btn-text">Train on Cloud</span>
-                                <span class="btn-loader hidden"></span>
+                            <button class="error-close" id="errorClose">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
                             </button>
                         </div>
                     </div>
 
-                    <div class="train-divider">
-                        <span>OR</span>
+                    <!-- Sidebar Info -->
+                    <aside class="content-sidebar">
+                        <div class="card info-card">
+                            <div class="info-header">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                </svg>
+                                <span>Format Requirements</span>
+                            </div>
+                            <ul class="requirements-list">
+                                <li>
+                                    <span class="req-check">✓</span>
+                                    <span>JSONL format with <code>messages</code> array</span>
+                                </li>
+                                <li>
+                                    <span class="req-check">✓</span>
+                                    <span>Minimum 50 examples <span class="req-note">(100-1000 recommended)</span></span>
+                                </li>
+                                <li>
+                                    <span class="req-check">✓</span>
+                                    <span>Each message: <code>role</code> and <code>content</code></span>
+                                </li>
+                                <li>
+                                    <span class="req-check">✓</span>
+                                    <span>Valid roles: <code>system</code>, <code>user</code>, <code>assistant</code></span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="card example-card">
+                            <div class="info-header">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="16 18 22 12 16 6"></polyline>
+                                    <polyline points="8 6 2 12 8 18"></polyline>
+                                </svg>
+                                <span>Example Format</span>
+                            </div>
+                            <pre class="code-block"><code>{"messages": [
+  {"role": "user", "content": "..."},
+  {"role": "assistant", "content": "..."}
+]}</code></pre>
+                        </div>
+                    </aside>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="action-bar">
+                    <button class="btn btn-primary" id="continueBtn" disabled>
+                        Continue
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 2: Questions -->
+            <section class="step-content" id="step2">
+                <div class="content-header centered">
+                    <div class="header-badge">Step 2</div>
+                    <h1>Configure Your Model</h1>
+                    <p>Tell us about your use case to get the best recommendation</p>
+                </div>
+
+                <!-- Question Container with Fade -->
+                <div class="question-container">
+                    <!-- Question 1: Task Type -->
+                    <div class="question-wrapper active" id="questionTask">
+                        <div class="question-label">Question 1 of 2</div>
+                        <h2 class="question-title">What will this model do?</h2>
+                        
+                        <div class="option-grid">
+                            <button class="option-card" data-task="classify">
+                                <div class="option-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="option-content">
+                                    <span class="option-title">Classify Text</span>
+                                    <span class="option-desc">Sentiment, categories, spam detection</span>
+                                </div>
+                            </button>
+                            <button class="option-card" data-task="qa">
+                                <div class="option-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </div>
+                                <div class="option-content">
+                                    <span class="option-title">Answer Questions</span>
+                                    <span class="option-desc">Q&A, knowledge retrieval, FAQ</span>
+                                </div>
+                            </button>
+                            <button class="option-card" data-task="conversation">
+                                <div class="option-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                </div>
+                                <div class="option-content">
+                                    <span class="option-title">Conversations</span>
+                                    <span class="option-desc">Chatbots, assistants, support</span>
+                                </div>
+                            </button>
+                            <button class="option-card" data-task="generation">
+                                <div class="option-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                                        <path d="M2 2l7.586 7.586"></path>
+                                        <circle cx="11" cy="11" r="2"></circle>
+                                    </svg>
+                                </div>
+                                <div class="option-content">
+                                    <span class="option-title">Generate Content</span>
+                                    <span class="option-desc">Writing, summaries, creative text</span>
+                                </div>
+                            </button>
+                            <button class="option-card" data-task="extraction">
+                                <div class="option-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="3" y1="9" x2="21" y2="9"></line>
+                                        <line x1="9" y1="21" x2="9" y2="9"></line>
+                                    </svg>
+                                </div>
+                                <div class="option-content">
+                                    <span class="option-title">Extract Information</span>
+                                    <span class="option-desc">Entities, structured data, parsing</span>
+                                </div>
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Local Training -->
-                    <div class="train-option train-local">
-                        <div class="train-option-icon">💻</div>
-                        <div class="train-option-content">
+                    <!-- Question 2: Deployment Target -->
+                    <div class="question-wrapper" id="questionDeployment">
+                        <div class="question-label">Question 2 of 2</div>
+                        <h2 class="question-title">Where will you deploy it?</h2>
+                        
+                        <div class="option-grid compact">
+                            <button class="option-card compact" data-deployment="cloud_api">
+                                <div class="option-icon small">☁️</div>
+                                <div class="option-content">
+                                    <span class="option-title">Cloud API</span>
+                                    <span class="option-desc">AWS, GCP, Azure</span>
+                                </div>
+                            </button>
+                            <button class="option-card compact" data-deployment="mobile_app">
+                                <div class="option-icon small">📱</div>
+                                <div class="option-content">
+                                    <span class="option-title">Mobile App</span>
+                                    <span class="option-desc">iOS & Android</span>
+                                </div>
+                            </button>
+                            <button class="option-card compact" data-deployment="edge_device">
+                                <div class="option-icon small">🔧</div>
+                                <div class="option-content">
+                                    <span class="option-title">Edge Device</span>
+                                    <span class="option-desc">Raspberry Pi, Jetson</span>
+                                </div>
+                            </button>
+                            <button class="option-card compact" data-deployment="web_browser">
+                                <div class="option-icon small">🌐</div>
+                                <div class="option-content">
+                                    <span class="option-title">Web Browser</span>
+                                    <span class="option-desc">WebGPU, WASM</span>
+                                </div>
+                            </button>
+                            <button class="option-card compact" data-deployment="desktop_app">
+                                <div class="option-icon small">💻</div>
+                                <div class="option-content">
+                                    <span class="option-title">Desktop App</span>
+                                    <span class="option-desc">Windows, macOS, Linux</span>
+                                </div>
+                            </button>
+                            <button class="option-card compact" data-deployment="not_sure">
+                                <div class="option-icon small">🤷</div>
+                                <div class="option-content">
+                                    <span class="option-title">Not Sure</span>
+                                    <span class="option-desc">Show all options</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-bar">
+                    <button class="btn btn-ghost" id="backToUpload">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        Back
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Recommendation -->
+            <section class="step-content" id="step3">
+                <div class="content-header centered">
+                    <div class="header-badge">Step 3</div>
+                    <h1>Model Recommendation</h1>
+                    <p id="recSubtitle">Based on your dataset and requirements</p>
+                </div>
+                
+                <!-- Loading State -->
+                <div class="loading-state" id="recLoading">
+                    <div class="loading-spinner"></div>
+                    <p>Analyzing your dataset...</p>
+                </div>
+
+                <!-- Recommendation Content -->
+                <div class="rec-content hidden" id="recContent">
+                    <div class="rec-grid">
+                        <!-- Primary Recommendation -->
+                        <div class="card primary-rec" id="primaryRec">
+                            <div class="rec-badge">Best Match</div>
+                            <div class="rec-header">
+                                <div class="rec-model-info">
+                                    <h3 class="rec-model-name" id="recModelName">-</h3>
+                                    <span class="rec-model-size" id="recModelSize">-</span>
+                                </div>
+                                <div class="rec-score-ring" id="recScoreRing">
+                                    <svg viewBox="0 0 36 36">
+                                        <defs>
+                                            <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" style="stop-color:#3b82f6"/>
+                                                <stop offset="100%" style="stop-color:#2563eb"/>
+                                            </linearGradient>
+                                        </defs>
+                                        <path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                        <path class="score-fill" id="scoreCircle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    </svg>
+                                    <span class="score-text" id="recScore">-</span>
+                                </div>
+                            </div>
+                            <div class="rec-reasons" id="recReasons"></div>
+                            <div class="rec-metrics">
+                                <div class="metric">
+                                    <span class="metric-value" id="recTime">~3 min</span>
+                                    <span class="metric-label">Training Time</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-value" id="recCost">$0.18</span>
+                                    <span class="metric-label">Est. Cost</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-value" id="recAccuracy">~87%</span>
+                                    <span class="metric-label">Accuracy</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Alternatives -->
+                        <div class="card alternatives-card">
+                            <h4 class="card-title">Alternative Models</h4>
+                            <div class="alternatives-list" id="alternativesGrid"></div>
+                        </div>
+                    </div>
+
+                    <!-- Dataset Summary -->
+                    <div class="card dataset-summary">
+                        <h4 class="card-title">Dataset Analysis</h4>
+                        <div class="summary-grid" id="datasetSummary"></div>
+                    </div>
+                </div>
+
+                <div class="action-bar">
+                    <button class="btn btn-ghost" id="backToQuestions">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        Back
+                    </button>
+                    <button class="btn btn-primary" id="startTrainingBtn">
+                        Start Training
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 4: Training -->
+            <section class="step-content" id="step4">
+                <div class="content-header centered">
+                    <div class="header-badge">Step 4</div>
+                    <h1>Start Training</h1>
+                    <p>Choose how you want to train your model</p>
+                </div>
+
+                <!-- Training Options -->
+                <div id="trainingOptions">
+                    <div class="training-grid">
+                        <div class="card training-option">
+                            <div class="training-icon">☁️</div>
+                            <h3>Train on Cloud</h3>
+                            <p>Run training on Modal's GPU servers. No setup required.</p>
+                            <ul class="training-features">
+                                <li>T4/A10G GPUs available</li>
+                                <li>Pay only for compute time</li>
+                                <li>Download model when done</li>
+                            </ul>
+                            <button class="btn btn-primary btn-full" id="trainCloudBtn">
+                                <span class="btn-text">Train on Cloud</span>
+                                <span class="btn-loader hidden"></span>
+                            </button>
+                        </div>
+
+                        <div class="card training-option">
+                            <div class="training-icon">💻</div>
                             <h3>Train Locally</h3>
                             <p>Download scripts and run on your own hardware.</p>
-                            <ul class="train-features">
-                                <li>✓ Full control over training</li>
-                                <li>✓ Use your own GPU</li>
-                                <li>✓ Customize as needed</li>
+                            <ul class="training-features">
+                                <li>Full control over training</li>
+                                <li>Use your own GPU</li>
+                                <li>Customize as needed</li>
                             </ul>
-                            <button class="btn btn-secondary" id="generateBtn">
+                            <button class="btn btn-secondary btn-full" id="generateBtn">
                                 <span class="btn-text">Download Package</span>
                                 <span class="btn-loader hidden"></span>
                             </button>
                         </div>
                     </div>
+
+                    <div class="action-bar">
+                        <button class="btn btn-ghost" id="backToRec">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                            Back
+                        </button>
+                    </div>
                 </div>
 
-                <div class="button-group">
-                    <button class="btn btn-secondary" id="backToPlan">← Back to Plan</button>
-                </div>
-            </section>
-
-            <!-- Step 4: Training Status / Complete -->
-            <section class="card step-content" id="step4">
                 <!-- Training in Progress -->
                 <div id="trainingProgress" class="hidden">
-                    <h2>⚡ Training in Progress</h2>
-                    <p class="subtitle">Your model is being fine-tuned on GPU</p>
-                    
-                    <div class="training-status-card">
-                        <div class="training-spinner"></div>
-                        <div class="training-info">
-                            <div class="training-job-id">Job: <span id="jobIdDisplay">-</span></div>
-                            <div class="training-status">Status: <span id="statusDisplay">Running</span></div>
-                            <div class="training-time">Started: <span id="startTimeDisplay">-</span></div>
+                    <div class="card">
+                        <div class="training-status-header">
+                            <div class="status-spinner"></div>
+                            <div class="status-info">
+                                <h3>Training in Progress</h3>
+                                <div class="status-meta">
+                                    <span>Job: <code id="jobIdDisplay">-</code></span>
+                                    <span>Status: <strong id="statusDisplay">Running</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="training-log">
+                            <div class="log-header">Training Log</div>
+                            <div class="log-output" id="logOutput">
+                                <div class="log-line">Initializing training environment...</div>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="training-log">
-                        <h3>Training Log</h3>
-                        <div class="log-output" id="logOutput">
-                            <div class="log-line">Initializing training environment...</div>
-                        </div>
-                    </div>
-
-                    <p class="training-note">Training typically takes 5-30 minutes depending on dataset size.</p>
                 </div>
 
                 <!-- Training Complete -->
                 <div id="trainingComplete" class="hidden">
-                    <h2>🎉 Training Complete!</h2>
-                    
-                    <div class="success-message">
-                        <div class="success-icon">✓</div>
-                        <p>Your model has been fine-tuned and is ready to use!</p>
-                    </div>
-
-                    <!-- Metrics Comparison -->
-                    <h3 class="section-title">📊 Performance Comparison</h3>
-                    <div class="comparison-container">
-                        <div class="comparison-card base-card">
-                            <div class="card-header">
-                                <span class="card-badge">Before</span>
-                                <h4>Base Model</h4>
-                                <p class="model-name" id="baseModelName">-</p>
-                            </div>
-                            <div class="card-metrics" id="baseMetrics"></div>
+                    <div class="card success-card">
+                        <div class="success-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
                         </div>
-                        
-                        <div class="comparison-arrow">→</div>
-                        
-                        <div class="comparison-card tuned-card">
-                            <div class="card-header">
-                                <span class="card-badge badge-success">After</span>
-                                <h4>Fine-tuned Model</h4>
-                                <p class="model-name">Your Custom Model</p>
-                            </div>
-                            <div class="card-metrics" id="tunedMetrics"></div>
-                        </div>
-                    </div>
-
-                    <!-- Improvement Summary -->
-                    <div class="improvement-summary" id="improvementSummary"></div>
-
-                    <!-- Try It Out Section -->
-                    <h3 class="section-title">🧪 Try It Out</h3>
-                    <div class="try-it-section">
-                        <p class="try-it-desc">Test your fine-tuned model with custom input:</p>
-                        <div class="try-it-input">
-                            <textarea id="tryInput" placeholder="Enter text to classify..." rows="3"></textarea>
-                            <button class="btn btn-primary" id="tryBtn">Compare Models</button>
-                        </div>
-                        
-                        <div class="try-it-results hidden" id="tryResults">
-                            <div class="try-result base-result">
-                                <div class="result-label">Base Model</div>
-                                <div class="result-prediction" id="basePrediction">-</div>
-                                <div class="result-confidence" id="baseConfidence">-</div>
-                            </div>
-                            <div class="try-result tuned-result">
-                                <div class="result-label">Fine-tuned</div>
-                                <div class="result-prediction" id="tunedPrediction">-</div>
-                                <div class="result-confidence" id="tunedConfidence">-</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Download Section -->
-                    <div class="download-section">
-                        <a class="btn btn-primary btn-large" id="downloadModelBtn" href="#" download>
-                            📦 Download Model (.zip)
+                        <h2>Training Complete!</h2>
+                        <p>Your model has been fine-tuned and is ready to use.</p>
+                        <a class="btn btn-primary" id="downloadModelBtn" href="#" download>
+                            Download Model (.zip)
                         </a>
-                        <p class="download-hint">Includes model weights, tokenizer, and config</p>
                     </div>
                 </div>
 
-                <!-- Download Package (Local) -->
+                <!-- Download Package -->
                 <div id="downloadPackage" class="hidden">
-                    <h2>🎉 Package Ready!</h2>
-                    
-                    <div class="success-message">
-                        <div class="success-icon">✓</div>
+                    <div class="card success-card">
+                        <div class="success-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        </div>
+                        <h2>Package Ready!</h2>
                         <p>Your training package has been generated.</p>
-                    </div>
-
-                    <div class="package-info">
-                        <h3>Package Contents</h3>
-                        <ul class="package-files">
-                            <li><code>config.json</code> - Training configuration</li>
-                            <li><code>train.py</code> - HuggingFace training script</li>
-                            <li><code>eval.py</code> - Evaluation script</li>
-                            <li><code>requirements.txt</code> - Dependencies</li>
-                            <li><code>README.md</code> - Instructions</li>
-                        </ul>
-                    </div>
-
-                    <div class="download-section">
-                        <a class="btn btn-primary btn-large" id="downloadBtn" href="#">
-                            ⬇️ Download Package (.zip)
+                        <div class="package-contents">
+                            <code>config.json</code>
+                            <code>train.py</code>
+                            <code>requirements.txt</code>
+                            <code>README.md</code>
+                        </div>
+                        <a class="btn btn-primary" id="downloadBtn" href="#">
+                            Download Package (.zip)
                         </a>
-                    </div>
-
-                    <div class="next-steps">
-                        <h3>Next Steps</h3>
-                        <ol>
-                            <li>Unzip the package</li>
-                            <li>Run <code>pip install -r requirements.txt</code></li>
-                            <li>Run <code>python train.py</code></li>
-                        </ol>
                     </div>
                 </div>
 
-                <button class="btn btn-secondary" id="startOver">Start New Project</button>
+                <button class="btn btn-ghost start-over" id="startOver">Start New Project</button>
             </section>
         </main>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <p>Built with LangGraph + FastAPI + GPT-4o</p>
-        </footer>
     </div>
 
-    <script src="/static/app.js?v=25"></script>
+    <script src="/static/app.js?v=36"></script>
 </body>
 </html>
