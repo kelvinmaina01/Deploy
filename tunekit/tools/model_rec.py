@@ -244,7 +244,7 @@ def recommend_model(
         # Factor 2: DATASET SIZE (30 points)
         if num_examples < 500:
             size_score = SIZE_SCORES_SMALL.get(model_key, 15)
-        elif num_examples > 2000:
+        elif num_examples >= 2000:
             size_score = SIZE_SCORES_LARGE.get(model_key, 15)
         else:
             size_score = SIZE_SCORES_MEDIUM.get(model_key, 15)
@@ -284,14 +284,47 @@ def recommend_model(
         print(f"      Task: {task_score}/50, Size: {size_score}/30, Output: {output_score}/20{bonus_str}")
     
     # ════════════════════════════════════════════════════════════
-    # STEP 4: PICK WINNER
+    # STEP 4: PICK WINNER (with tie-breaking)
     # ════════════════════════════════════════════════════════════
     
-    sorted_models = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # Tie-breaker priorities: Task-specific > Quality order
+    TIEBREAKER = {
+        # Task-specific: Best model for each task when tied
+        'classify': ['phi-4-mini', 'gemma-3-2b', 'llama-3.2-3b', 'mistral-7b', 'qwen-2.5-3b'],
+        'extraction': ['phi-4-mini', 'llama-3.2-3b', 'mistral-7b', 'qwen-2.5-3b', 'gemma-3-2b'],
+        'qa': ['llama-3.2-3b', 'mistral-7b', 'phi-4-mini', 'qwen-2.5-3b', 'gemma-3-2b'],
+        'conversation': ['llama-3.2-3b', 'mistral-7b', 'qwen-2.5-3b', 'phi-4-mini', 'gemma-3-2b'],
+        'generation': ['mistral-7b', 'llama-3.2-3b', 'qwen-2.5-3b', 'phi-4-mini', 'gemma-3-2b'],
+        # Default: Quality order (largest/most accurate first)
+        'default': ['mistral-7b', 'llama-3.2-3b', 'phi-4-mini', 'qwen-2.5-3b', 'gemma-3-2b']
+    }
+    
+    # Get priority order for this task
+    priority_order = TIEBREAKER.get(user_task, TIEBREAKER['default'])
+    
+    def get_priority(model_key):
+        """Lower index = higher priority for tie-breaking."""
+        try:
+            return priority_order.index(model_key)
+        except ValueError:
+            return 99  # Unknown model gets lowest priority
+    
+    # Sort by score DESC, then by priority ASC (for ties)
+    sorted_models = sorted(
+        scores.items(), 
+        key=lambda x: (-x[1], get_priority(x[0]))
+    )
+    
     primary_key = sorted_models[0][0]
     primary_score = sorted_models[0][1]
     
-    print(f"\n✅ Winner: {MODELS[primary_key]['name']} ({primary_score}/100)")
+    # Check if there was a tie
+    tied_models = [m for m, s in scores.items() if s == primary_score]
+    if len(tied_models) > 1:
+        print(f"\n⚖️  Tie detected: {[MODELS[m]['name'] for m in tied_models]}")
+        print(f"   Breaking tie using {user_task} task preference → {MODELS[primary_key]['name']}")
+    
+    print(f"\n✅ Winner: {MODELS[primary_key]['name']} ({primary_score})")
     
     # Generate reasons
     reasons = generate_reasons(primary_key, user_task, num_examples, avg_response_length, looks_like_json, is_multi_turn, deployment_target)
@@ -384,36 +417,50 @@ def build_response(
     
     model = MODELS[primary_key]
     
-    # Scale time/cost based on dataset size (base is ~200 examples)
-    scale_factor = max(0.5, min(10.0, num_examples / 200))
+    # Realistic scaling: Training time scales sub-linearly with dataset size
+    # Base values are for ~200 examples
+    # Formula: time = base * sqrt(examples / 200) * size_mult
+    # This accounts for batch processing efficiency at larger scales
     
-    # Model size multiplier
-    size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.1, '7B': 2.0}.get(model['size'], 1.0)
+    base_examples = 200
+    examples_ratio = num_examples / base_examples
     
-    scaled_time = max(2, round(model['training_time_base'] * scale_factor * size_mult))
-    scaled_cost = round(model['cost_base'] * scale_factor * size_mult, 2)
+    # Sub-linear scaling (square root) for time - larger batches are more efficient
+    time_scale = max(0.7, min(5.0, (examples_ratio ** 0.65)))
+    
+    # Linear scaling for cost (compute hours scale more directly)
+    cost_scale = max(0.5, min(8.0, examples_ratio))
+    
+    # Model size multipliers (larger models take longer and cost more)
+    size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.2, '7B': 2.2}.get(model['size'], 1.0)
+    
+    scaled_time = max(2, round(model['training_time_base'] * time_scale * size_mult))
+    scaled_cost = round(model['cost_base'] * cost_scale * size_mult, 2)
     
     # Confidence based on score
     confidence = 'high' if score >= 80 else ('medium' if score >= 60 else 'low')
     
-    # Accuracy estimate
-    accuracy_boost = min(score / 20, 5)
+    # Accuracy estimate: baseline + small boost based on score
+    # Higher score = better model fit = slightly better accuracy
+    accuracy_boost = min(score / 25, 4)  # Max +4% boost
     estimated_accuracy = min(model['accuracy_baseline'] + accuracy_boost, 95)
     
-    # Build alternatives with scaled costs
+    # Build alternatives with scaled costs (using same scaling logic)
     formatted_alternatives = []
     if alternatives:
         for alt in alternatives:
             alt_model = MODELS.get(alt.get('model'))
             if alt_model:
-                alt_scale = max(0.5, min(10.0, num_examples / 200))
-                alt_size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.1, '7B': 2.0}.get(alt_model['size'], 1.0)
+                alt_examples_ratio = num_examples / base_examples
+                alt_time_scale = max(0.7, min(5.0, (alt_examples_ratio ** 0.65)))
+                alt_cost_scale = max(0.5, min(8.0, alt_examples_ratio))
+                alt_size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.2, '7B': 2.2}.get(alt_model['size'], 1.0)
                 formatted_alternatives.append({
                     'model_name': alt_model['name'],
                     'score': round(alt.get('score', 0) / 100, 2),
                     'reasons': alt.get('reasons', ['Good alternative']),
-                    'training_time_min': max(2, round(alt_model['training_time_base'] * alt_scale * alt_size_mult)),
-                    'cost_usd': round(alt_model['cost_base'] * alt_scale * alt_size_mult, 2)
+                    'training_time_min': max(2, round(alt_model['training_time_base'] * alt_time_scale * alt_size_mult)),
+                    'cost_usd': round(alt_model['cost_base'] * alt_cost_scale * alt_size_mult, 2)
                 })
     
     return {
