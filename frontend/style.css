@@ -1292,6 +1292,7 @@ body {
     background: var(--accent);
     color: white;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+    min-width: 120px;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -1301,7 +1302,7 @@ body {
 }
 
 .btn-primary:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -1355,50 +1356,219 @@ body {
 }
 
 /* ============================================================================
-   QUESTION CONTAINER
+   INTERACTIVE QUESTION FLOW
    ============================================================================ */
 
-.question-container {
+.interactive-flow {
+    max-width: 900px;
+    margin: 60px auto 60px;
+    padding: 0 24px;
     position: relative;
-    min-height: 450px;
-    margin-bottom: 32px;
+    min-height: 480px;
 }
 
-.question-wrapper {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+.flow-question {
+    display: none;
     opacity: 0;
     transform: translateY(16px);
     pointer-events: none;
-    transition: all 0.4s var(--ease);
 }
 
-.question-wrapper.active {
-    position: relative;
-    opacity: 1;
-    transform: translateY(0);
+.flow-question.active {
+    display: block;
     pointer-events: all;
+    animation: questionFadeIn 0.4s var(--ease) forwards;
 }
 
-.question-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
+@keyframes questionFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.flow-question-header {
+    margin-bottom: 48px;
     text-align: center;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
 }
 
-.question-title {
-    font-size: 28px;
+.question-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.15));
+    padding: 8px 16px;
+    border-radius: 24px;
+    margin-bottom: 24px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.flow-question-text {
+    font-size: 38px;
     font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Typewriter cursor */
+.flow-question-text.typing::after {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 0.9em;
+    background: var(--accent);
+    margin-left: 4px;
+    vertical-align: middle;
+    animation: cursorBlink 0.8s ease infinite;
+}
+
+@keyframes cursorBlink {
+    0%, 45% { opacity: 1; }
+    50%, 95% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* Options grid - handles both 5 and 6 items elegantly */
+.flow-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* For 5-item grid: center the last item across the bottom */
+.flow-options.five-items {
+    grid-template-columns: repeat(6, 1fr);
+}
+
+.flow-options.five-items .flow-option:nth-child(1),
+.flow-options.five-items .flow-option:nth-child(2),
+.flow-options.five-items .flow-option:nth-child(3) {
+    grid-column: span 2;
+}
+
+.flow-options.five-items .flow-option:nth-child(4) {
+    grid-column: 2 / span 2;
+}
+
+.flow-options.five-items .flow-option:nth-child(5) {
+    grid-column: 4 / span 2;
+}
+
+.flow-option {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     text-align: center;
-    margin-bottom: 40px;
-    letter-spacing: -0.02em;
+    min-height: 110px;
+    padding: 24px 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+    font-family: var(--font-sans);
+    opacity: 0;
+    animation: optionReveal 0.5s var(--ease) forwards;
+    animation-delay: calc(var(--delay) * 0.08s + 1.2s);
+    position: relative;
+    overflow: hidden;
+}
+
+.flow-option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.04));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+@keyframes optionReveal {
+    to {
+        opacity: 1;
+    }
+}
+
+.flow-option:hover:not(.selected) {
+    border-color: var(--accent);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.flow-option:hover:not(.selected)::before {
+    opacity: 1;
+}
+
+.flow-option.selected {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.flow-option.selected::before {
+    opacity: 1;
+}
+
+.flow-option.unselected {
+    opacity: 0.2;
+    pointer-events: none;
+}
+
+.flow-option-title {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+    position: relative;
+    z-index: 1;
+}
+
+.flow-option-desc {
+    display: block;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+    position: relative;
+    z-index: 1;
+}
+
+.flow-back-btn {
+    position: fixed;
+    bottom: 40px;
+    left: 40px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    animation: backBtnReveal 0.3s ease forwards;
+    animation-delay: 0.5s;
+}
+
+@keyframes backBtnReveal {
+    to {
+        opacity: 0.7;
+    }
+}
+
+.flow-back-btn:hover {
+    opacity: 1;
 }
 
 /* ============================================================================

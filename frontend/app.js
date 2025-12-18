@@ -63,22 +63,72 @@ function setStep(step) {
 }
 
 // ============================================================================
-// QUESTION FADE TRANSITIONS
+// QUESTION FADE TRANSITIONS & TYPEWRITER EFFECT
 // ============================================================================
+
+function typewriterEffect(element, text, callback) {
+    // Clear any existing intervals
+    if (element._typewriterInterval) {
+        clearInterval(element._typewriterInterval);
+    }
+
+    let index = 0;
+    element.classList.add('typing');
+    element.textContent = '';
+
+    // Start typing immediately
+    element._typewriterInterval = setInterval(() => {
+        if (index < text.length) {
+            element.textContent += text[index];
+            index++;
+        } else {
+            clearInterval(element._typewriterInterval);
+            element._typewriterInterval = null;
+            // Keep cursor briefly, then remove
+            setTimeout(() => {
+                element.classList.remove('typing');
+                if (callback) callback();
+            }, 300);
+        }
+    }, 45); // Smooth typing speed
+}
 
 function showQuestion(questionId) {
     const questionWrapper = document.getElementById(questionId);
-    const allQuestions = document.querySelectorAll('.question-wrapper');
-    
-    // Hide all questions
+    const allQuestions = document.querySelectorAll('.flow-question');
+
+    // Hide all questions first
     allQuestions.forEach(q => {
         q.classList.remove('active');
     });
-    
-    // Show the selected question with fade
-    setTimeout(() => {
-        questionWrapper.classList.add('active');
-    }, 50);
+
+    // Clear the question text before showing
+    const questionText = questionWrapper.querySelector('.flow-question-text');
+    if (questionText) {
+        questionText.textContent = '';
+        questionText.classList.remove('typing');
+    }
+
+    // Reset option animations and selections for this question
+    const options = questionWrapper.querySelectorAll('.flow-option');
+    options.forEach((opt, i) => {
+        // Clear selection state
+        opt.classList.remove('selected');
+        opt.removeAttribute('style');
+        // Reset animations
+        opt.style.animation = 'none';
+        opt.offsetHeight; // Force reflow
+        opt.style.animation = '';
+        opt.style.setProperty('--delay', i);
+    });
+
+    // Show the question wrapper
+    questionWrapper.classList.add('active');
+
+    // Start typewriter immediately
+    if (questionText && questionText.dataset.text) {
+        typewriterEffect(questionText, questionText.dataset.text);
+    }
 }
 
 function hideQuestion(questionId) {
@@ -159,9 +209,14 @@ async function uploadFile(file) {
     const formData = new FormData();
     formData.append('file', file);
     
-    // Show loading state
+    // Show loading state immediately without any delay
     continueBtn.disabled = true;
-    continueBtn.innerHTML = 'Uploading... <span class="btn-loader"></span>';
+    continueBtn.textContent = 'Uploading...';
+    
+    // Add spinner after text change
+    const spinner = document.createElement('span');
+    spinner.className = 'btn-loader';
+    continueBtn.appendChild(spinner);
         
     try {
         const response = await fetch(`${API_URL}/upload`, {
@@ -568,7 +623,7 @@ function generateSuggestedPrompts(stats) {
     } else if (avgOutputTokens > 200) {
         // Long outputs suggest content generation
         prompts.push(...TASK_PROMPTS.generation);
-    } else {
+                } else {
         // Medium outputs suggest Q&A
         prompts.push(...TASK_PROMPTS.qa);
     }
@@ -639,6 +694,7 @@ function clearFile() {
     hideSystemPromptCard();
     dropZone.style.display = '';
     continueBtn.disabled = true;
+    resetContinueBtn(); // Reset button text when clearing file
     hideError();
 }
 
@@ -648,24 +704,35 @@ function clearFile() {
 
 continueBtn?.addEventListener('click', async () => {
     if (!sessionId) return;
-    
-    // Move to questions step
-    setStep(2);
-    
-    // Reset selections
+
+    // Reset selections first
     selectedTask = null;
     selectedDeployment = null;
-    
-    // Show task question with fade
-    setTimeout(() => {
-        showQuestion('questionTask');
-        hideQuestion('questionDeployment');
-    }, 100);
-    
-    // Remove any previous selections
-    document.querySelectorAll('.option-card').forEach(card => {
-        card.classList.remove('selected');
+
+    // Reset all flow options
+    document.querySelectorAll('.flow-option').forEach(opt => {
+        opt.classList.remove('selected');
+        opt.style.opacity = '';
+        opt.style.pointerEvents = '';
     });
+
+    // Clear ALL question texts and hide all questions BEFORE transitioning
+    document.querySelectorAll('.flow-question').forEach(q => {
+        q.classList.remove('active');
+        const text = q.querySelector('.flow-question-text');
+        if (text) {
+            text.textContent = '';
+            text.classList.remove('typing');
+        }
+    });
+
+    // Move to questions step
+    setStep(2);
+
+    // Wait for step transition to complete, then show question
+            setTimeout(() => {
+        showQuestion('questionTask');
+    }, 350);
 });
 
 // ============================================================================
@@ -673,50 +740,137 @@ continueBtn?.addEventListener('click', async () => {
 // ============================================================================
 
 // Task selection
-document.querySelectorAll('.option-card[data-task]').forEach(card => {
-    card.addEventListener('click', () => {
-        // Remove previous selection
-        document.querySelectorAll('.option-card[data-task]').forEach(c => c.classList.remove('selected'));
-        
-        // Select this one
-        card.classList.add('selected');
-        selectedTask = card.dataset.task;
-        
+document.querySelectorAll('.flow-option[data-task]').forEach(option => {
+    option.addEventListener('click', () => {
+        // Prevent if already selected
+        if (option.classList.contains('selected')) return;
+
+        // Reset all task options first
+        document.querySelectorAll('.flow-option[data-task]').forEach(opt => {
+            opt.classList.remove('selected');
+            opt.style.opacity = '';
+            opt.style.pointerEvents = '';
+        });
+
+        // Dim other options
+        document.querySelectorAll('.flow-option[data-task]').forEach(opt => {
+            if (opt !== option) {
+                opt.style.opacity = '0.3';
+                opt.style.pointerEvents = 'none';
+            }
+        });
+
+        // Highlight selected option
+        option.style.opacity = '1';
+        option.classList.add('selected');
+        selectedTask = option.dataset.task;
+
         // Fade out task question, fade in deployment question
-        hideQuestion('questionTask');
         setTimeout(() => {
-            showQuestion('questionDeployment');
-        }, 300);
+            hideQuestion('questionTask');
+            setTimeout(() => {
+                showQuestion('questionDeployment');
+            }, 300);
+        }, 500);
     });
 });
 
 // Deployment selection
-document.querySelectorAll('.option-card[data-deployment]').forEach(card => {
-    card.addEventListener('click', async () => {
-        // Remove previous selection
-        document.querySelectorAll('.option-card[data-deployment]').forEach(c => c.classList.remove('selected'));
-        
-        // Select this one
-        card.classList.add('selected');
-        selectedDeployment = card.dataset.deployment;
-        
+document.querySelectorAll('.flow-option[data-deployment]').forEach(option => {
+    option.addEventListener('click', async () => {
+        // Prevent if already selected
+        if (option.classList.contains('selected')) return;
+
+        // Reset all deployment options first
+        document.querySelectorAll('.flow-option[data-deployment]').forEach(opt => {
+            opt.classList.remove('selected');
+            opt.style.opacity = '';
+            opt.style.pointerEvents = '';
+        });
+
+        // Dim other options
+        document.querySelectorAll('.flow-option[data-deployment]').forEach(opt => {
+            if (opt !== option) {
+                opt.style.opacity = '0.3';
+                opt.style.pointerEvents = 'none';
+            }
+        });
+
+        // Highlight selected option
+        option.style.opacity = '1';
+        option.classList.add('selected');
+        selectedDeployment = option.dataset.deployment;
+
         // Fade out deployment question, move to recommendation
-        hideQuestion('questionDeployment');
         setTimeout(() => {
-            setStep(3);
-            getRecommendation();
-        }, 300);
+            hideQuestion('questionDeployment');
+            setTimeout(() => {
+                setStep(3);
+                getRecommendation();
+            }, 600);
+        }, 500);
     });
 });
 
 // Back buttons
 document.getElementById('backToUpload')?.addEventListener('click', () => {
-    setStep(1);
+    // Check if we're on question 2 (deployment)
+    const deploymentQuestion = document.getElementById('questionDeployment');
+    const taskQuestion = document.getElementById('questionTask');
+    
+    if (deploymentQuestion?.classList.contains('active')) {
+        // Go back to question 1 (task)
+        hideQuestion('questionDeployment');
+        
+        // Reset deployment selection
+        selectedDeployment = null;
+        document.querySelectorAll('.flow-option[data-deployment]').forEach(opt => {
+            opt.classList.remove('selected');
+            opt.removeAttribute('style');
+        });
+        
+        // Reset task selection IMMEDIATELY and completely - do it NOW
+        selectedTask = null;
+        const taskOptions = document.querySelectorAll('.flow-option[data-task]');
+        taskOptions.forEach(opt => {
+            // Remove class
+            opt.classList.remove('selected');
+            // Remove ALL inline styles
+            opt.removeAttribute('style');
+            // Force reset computed styles by toggling
+            opt.style.display = 'none';
+            opt.offsetHeight; // Force reflow
+            opt.style.display = '';
+        });
+        
+        // Show task question with typewriter
+        setTimeout(() => {
+            showQuestion('questionTask');
+            
+            // Force reset AGAIN after question is visible to ensure it's clean
+            setTimeout(() => {
+                taskOptions.forEach(opt => {
+                    opt.classList.remove('selected');
+                    opt.removeAttribute('style');
+                });
+            }, 100);
+        }, 200);
+    } else {
+        // Go back to step 1 (upload)
+        setStep(1);
+    }
 });
 
 document.getElementById('backToQuestions')?.addEventListener('click', () => {
     setStep(2);
-    // Show deployment question (user was already past task)
+
+    // Reset flow options state
+    document.querySelectorAll('.flow-option').forEach(opt => {
+        opt.style.opacity = '';
+        opt.style.pointerEvents = '';
+    });
+
+    // Show deployment question (user was already past task) with typewriter
     setTimeout(() => {
         hideQuestion('questionTask');
         showQuestion('questionDeployment');
@@ -827,9 +981,6 @@ function displayRecommendation(data) {
         `;
         altGrid.appendChild(div);
     });
-    
-    // Dataset summary
-    displayDatasetSummary(data.analysis);
 }
 
 function displayDatasetSummary(analysis) {
