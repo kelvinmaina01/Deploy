@@ -240,12 +240,6 @@ def ingest_data(state: "TuneKitState") -> dict:
         avg_user_len = sum(all_user_lengths) // len(all_user_lengths) if all_user_lengths else 0
         avg_assistant_len = sum(all_assistant_lengths) // len(all_assistant_lengths) if all_assistant_lengths else 0
         
-        # Training estimates (rough calculations)
-        # Based on typical fine-tuning costs and times
-        tokens_per_minute = 50000  # rough estimate for A10G
-        est_training_time_min = max(3, (estimated_tokens * 3) // tokens_per_minute)  # 3 epochs
-        est_cost_usd = round(0.001 * (estimated_tokens // 1000) * 3, 2)  # rough modal cost
-        
         # Warnings
         warnings: List[str] = []
         if avg_tokens_per_example > 2000:
@@ -275,10 +269,6 @@ def ingest_data(state: "TuneKitState") -> dict:
             "avg_input_chars": avg_user_len,
             "avg_output_chars": avg_assistant_len,
             
-            # Training estimates
-            "est_training_time_min": est_training_time_min,
-            "est_cost_usd": max(0.15, est_cost_usd),
-            
             # Quality
             "quality": quality,
             "warnings": warnings,
@@ -286,7 +276,6 @@ def ingest_data(state: "TuneKitState") -> dict:
         
         print(f"✅ Loaded {num_rows} conversations ({estimated_tokens:,} tokens)")
         print(f"📊 {stats['single_turn_pct']}% single-turn, {stats['multi_turn_pct']}% multi-turn")
-        print(f"⏱️  Est. training: ~{est_training_time_min} min, ~${stats['est_cost_usd']}")
         if warnings:
             for w in warnings:
                 print(f"   ⚠️ {w}")

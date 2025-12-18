@@ -276,26 +276,6 @@ function showDatasetSummary(stats) {
     // Build clean stats table
     let html = '';
     
-    // Primary metrics row
-    html += '<div class="stats-primary">';
-    html += `<div class="primary-stat">
-        <span class="primary-value">${(stats.total_tokens || 0).toLocaleString()}</span>
-        <span class="primary-label">Total Tokens</span>
-    </div>`;
-    html += `<div class="primary-stat">
-        <span class="primary-value">${stats.avg_tokens_per_example || 0}</span>
-        <span class="primary-label">Avg Tokens/Example</span>
-    </div>`;
-    html += `<div class="primary-stat">
-        <span class="primary-value">~${stats.est_training_time_min || 3} min</span>
-        <span class="primary-label">Est. Training Time</span>
-    </div>`;
-    html += `<div class="primary-stat">
-        <span class="primary-value">$${stats.est_cost_usd || '0.15'}</span>
-        <span class="primary-label">Est. Cost</span>
-    </div>`;
-    html += '</div>';
-    
     // Secondary details
     html += '<div class="stats-details">';
     

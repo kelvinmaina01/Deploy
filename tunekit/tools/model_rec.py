@@ -559,6 +559,24 @@ def recommend_model(
     accuracy_boost = min(primary_score * 5, 5)  # Up to 5% boost
     estimated_accuracy = min(primary_model['accuracy_baseline'] + accuracy_boost, 95)
     
+    # Scale time/cost based on dataset size
+    # Base values in MODELS dict are for ~200 examples
+    # Scale factor: min 0.5x (very small), max 10x (very large)
+    base_dataset_size = 200
+    scale_factor = max(0.5, min(10.0, num_examples / base_dataset_size))
+    
+    # Model size also affects scaling (larger models = slower/more expensive)
+    model_size_multiplier = {
+        '2B': 0.7,   # Gemma - fastest
+        '3B': 1.0,   # Llama, Qwen - baseline
+        '3.8B': 1.1, # Phi-4 - slightly slower
+        '7B': 2.0    # Mistral - much slower
+    }
+    size_mult = model_size_multiplier.get(primary_model['size'], 1.0)
+    
+    scaled_time = max(2, round(primary_model['training_time_min'] * scale_factor * size_mult))
+    scaled_cost = round(primary_model['cost_usd'] * scale_factor * size_mult, 2)
+    
     primary_recommendation = {
         'model_id': primary_model['id'],
         'model_name': primary_model['name'],
@@ -566,8 +584,8 @@ def recommend_model(
         'score': round(primary_score, 2),
         'confidence': confidence,
         'reasons': generate_reasons(primary_key, user_task, conversation_characteristics, num_examples, primary_score, deployment_target),
-        'training_time_min': primary_model['training_time_min'],
-        'cost_usd': primary_model['cost_usd'],
+        'training_time_min': scaled_time,
+        'cost_usd': scaled_cost,
         'estimated_accuracy': round(estimated_accuracy, 1)
     }
     
@@ -577,18 +595,26 @@ def recommend_model(
         model = MODELS[model_key]
         alt_reasons = []
         
+        # Scale time/cost for alternative models too
+        alt_scale_factor = max(0.5, min(10.0, num_examples / base_dataset_size))
+        alt_size_mult = model_size_multiplier.get(model['size'], 1.0)
+        alt_scaled_time = max(2, round(model['training_time_min'] * alt_scale_factor * alt_size_mult))
+        alt_scaled_cost = round(model['cost_usd'] * alt_scale_factor * alt_size_mult, 2)
+        
         # Add reasons based on strengths
         if score >= 0.7:
             alt_reasons.append(f"Strong alternative ({score:.0%} match)")
-        if model['cost_usd'] < primary_model['cost_usd']:
-            alt_reasons.append(f"Lower cost (${model['cost_usd']})")
-        if model['training_time_min'] < primary_model['training_time_min']:
-            alt_reasons.append(f"Faster training ({model['training_time_min']} min)")
+        if alt_scaled_cost < scaled_cost:
+            alt_reasons.append(f"Lower cost (${alt_scaled_cost})")
+        if alt_scaled_time < scaled_time:
+            alt_reasons.append(f"Faster training ({alt_scaled_time} min)")
         
         alternatives.append({
             'model_name': model['name'],
             'score': round(score, 2),
-            'reasons': alt_reasons[:2] if alt_reasons else ['Good alternative option']
+            'reasons': alt_reasons[:2] if alt_reasons else ['Good alternative option'],
+            'training_time_min': alt_scaled_time,
+            'cost_usd': alt_scaled_cost
         })
     
     print(f"\n✅ Recommended: {primary_model['name']} (score: {primary_score:.2f}, confidence: {confidence})")

@@ -567,6 +567,7 @@ body {
 .dataset-summary-card {
     margin-top: 20px;
     padding: 0;
+    margin-bottom: 0;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -597,6 +598,7 @@ body {
 
 .summary-stats-grid {
     padding: 0;
+    margin: 0;
 }
 
 /* Primary stats - top row */
@@ -647,6 +649,7 @@ body {
 
 .detail-row:last-child {
     border-bottom: none;
+    margin-bottom: 0;
 }
 
 .detail-label {
@@ -689,12 +692,19 @@ body {
     background: rgba(245, 158, 11, 0.05);
     border-top: 1px solid rgba(245, 158, 11, 0.2);
     padding: 12px 20px;
+    margin: 0;
 }
 
 .warning-item {
     font-size: 13px;
     color: var(--warning);
     padding: 4px 0;
+    margin: 0;
+}
+
+.warning-item:last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
 }
 
 .warning-item.with-action {
