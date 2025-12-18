@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=41">
+    <link rel="stylesheet" href="/static/style.css?v=44">
 </head>
 <body>
     <div class="app-wrapper">
@@ -222,20 +222,8 @@
                                     </div>
 
                                     <div class="modal-body">
-                                        <div class="prompt-tabs">
-                                            <button class="prompt-tab active" data-tab="suggested">Suggested</button>
-                                            <button class="prompt-tab" data-tab="custom">Custom</button>
-                                        </div>
-
-                                        <div class="prompt-content" id="suggestedPromptContent">
-                                            <div class="suggested-prompts" id="suggestedPrompts">
-                                                <!-- Populated by JS -->
-                                            </div>
-                                        </div>
-
-                                        <div class="prompt-content hidden" id="customPromptContent">
-                                            <textarea class="prompt-textarea" id="customPromptInput" placeholder="Enter your system prompt..."></textarea>
-                                        </div>
+                                        <p class="prompt-description">Add a system prompt to guide your model's behavior and improve consistency.</p>
+                                        <textarea class="prompt-textarea" id="customPromptInput" placeholder="Example: You are a helpful assistant that provides clear, concise answers. Always maintain a professional tone and cite sources when possible."></textarea>
                                     </div>
 
                                     <div class="modal-footer">

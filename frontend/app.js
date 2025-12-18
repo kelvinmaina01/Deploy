@@ -377,37 +377,7 @@ function showDatasetSummary(stats) {
 let selectedSystemPrompt = null;
 
 function setupSystemPromptModal(stats) {
-    const suggestedPrompts = document.getElementById('suggestedPrompts');
-
-    if (!suggestedPrompts) return;
-    
-    // Generate suggested prompts based on dataset characteristics
-    const suggestions = generateSuggestedPrompts(stats);
-    
-    // Render suggested prompts
-    suggestedPrompts.innerHTML = suggestions.map((s, i) => `
-        <div class="suggested-prompt-option ${i === 0 ? 'selected' : ''}" data-index="${i}">
-            <div class="prompt-radio"></div>
-            <div class="prompt-option-content">
-                <div class="prompt-option-label">${s.label}</div>
-                <div class="prompt-option-text">${s.prompt}</div>
-            </div>
-        </div>
-    `).join('');
-    
-    // Select first by default
-    selectedSystemPrompt = suggestions[0]?.prompt || '';
-    
-    // Add click handlers for suggested prompts
-    document.querySelectorAll('.suggested-prompt-option').forEach(el => {
-        el.addEventListener('click', () => {
-            document.querySelectorAll('.suggested-prompt-option').forEach(o => o.classList.remove('selected'));
-            el.classList.add('selected');
-            selectedSystemPrompt = suggestions[parseInt(el.dataset.index)]?.prompt || '';
-        });
-    });
-    
-    // Set up event listeners for modal
+    // Just set up event listeners for the modal
     setupSystemPromptListeners();
 }
 
@@ -451,24 +421,6 @@ function setupSystemPromptListeners() {
         modal.dataset.listenerAttached = 'true';
     }
     
-    // Tab switching
-    document.querySelectorAll('.prompt-tab').forEach(tab => {
-        if (!tab.dataset.listenerAttached) {
-            tab.addEventListener('click', () => {
-                const tabName = tab.dataset.tab;
-                
-                // Update active tab
-                document.querySelectorAll('.prompt-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                // Show corresponding content
-                document.getElementById('suggestedPromptContent').classList.toggle('hidden', tabName !== 'suggested');
-                document.getElementById('customPromptContent').classList.toggle('hidden', tabName !== 'custom');
-            });
-            tab.dataset.listenerAttached = 'true';
-        }
-    });
-    
     // Apply button
     const applyBtn = document.getElementById('applyPromptBtn');
     if (applyBtn && !applyBtn.dataset.listenerAttached) {
@@ -478,15 +430,12 @@ function setupSystemPromptListeners() {
                 showError('No active session. Please upload a file first.');
                 return;
             }
-            
+
             const customInput = document.getElementById('customPromptInput');
-            const customTab = document.querySelector('.prompt-tab[data-tab="custom"]');
-            const isCustomTab = customTab && customTab.classList.contains('active');
-            
-            const prompt = isCustomTab ? customInput.value.trim() : selectedSystemPrompt;
-            
+            const prompt = customInput.value.trim();
+
             if (!prompt) {
-                showError('Please enter or select a system prompt');
+                showError('Please enter a system prompt');
                 return;
             }
             
@@ -537,46 +486,122 @@ function setupSystemPromptListeners() {
     }
 }
 
+// Task-specific prompt templates
+const TASK_PROMPTS = {
+    'classify': [
+        {
+            label: 'Classification Specialist',
+            icon: '🎯',
+            tagline: 'Optimized for accurate categorization',
+            bestFor: 'Sentiment analysis, content categorization, intent detection',
+            prompt: 'You are a classification model. Analyze inputs carefully and return the most appropriate category. Be consistent in your classifications and provide confident, direct responses.'
+        },
+        {
+            label: 'Multi-Label Classifier',
+            icon: '🏷️',
+            tagline: 'For inputs with multiple categories',
+            bestFor: 'Content tagging, feature detection, multi-class problems',
+            prompt: 'You are a multi-label classification assistant. Analyze the input and identify all applicable categories. Maintain consistency in your labeling and explain your reasoning when multiple categories apply.'
+        }
+    ],
+    'qa': [
+        {
+            label: 'Knowledge Expert',
+            icon: '💡',
+            tagline: 'Accurate answers with clear reasoning',
+            bestFor: 'FAQ systems, knowledge bases, documentation',
+            prompt: 'You are a knowledgeable assistant specializing in answering questions accurately. Provide clear, well-researched answers. If you\'re uncertain about something, acknowledge it. Include reasoning or sources when helpful.'
+        },
+        {
+            label: 'Technical Support',
+            icon: '🔧',
+            tagline: 'Troubleshooting and problem-solving',
+            bestFor: 'Customer support, technical assistance, debugging help',
+            prompt: 'You are a technical support specialist. When answering questions, first understand the user\'s problem, then provide step-by-step solutions. Be patient and ask clarifying questions when needed.'
+        }
+    ],
+    'conversation': [
+        {
+            label: 'Friendly Assistant',
+            icon: '💬',
+            tagline: 'Natural, engaging conversations',
+            bestFor: 'Chatbots, customer service, virtual assistants',
+            prompt: 'You are a friendly, conversational assistant. Engage naturally with users, maintain context throughout the conversation, and ask clarifying questions when needed. Be helpful while keeping responses concise.'
+        },
+        {
+            label: 'Professional Consultant',
+            icon: '👔',
+            tagline: 'Formal, business-appropriate tone',
+            bestFor: 'Enterprise chatbots, professional services, B2B interactions',
+            prompt: 'You are a professional consultant assistant. Maintain a courteous and professional tone. Provide thorough, well-structured responses and prioritize accuracy and clarity in all communications.'
+        }
+    ],
+    'generation': [
+        {
+            label: 'Creative Writer',
+            icon: '✍️',
+            tagline: 'Engaging, creative content',
+            bestFor: 'Blog posts, marketing copy, creative writing',
+            prompt: 'You are a creative content writer. Generate engaging, well-structured content that captures attention. Adapt your writing style to match the requested tone and format. Be original and compelling.'
+        },
+        {
+            label: 'Technical Writer',
+            icon: '📝',
+            tagline: 'Clear, precise documentation',
+            bestFor: 'Documentation, tutorials, technical guides',
+            prompt: 'You are a technical writer. Create clear, precise, and well-organized content. Use appropriate technical terminology, provide step-by-step instructions when relevant, and ensure accuracy in all details.'
+        }
+    ],
+    'extraction': [
+        {
+            label: 'Data Extraction Specialist',
+            icon: '📊',
+            tagline: 'Structured data extraction',
+            bestFor: 'Entity extraction, form parsing, data structuring',
+            prompt: 'You are a data extraction specialist. Analyze inputs and extract relevant information in a consistent, structured format. Be precise and thorough. If information is missing or unclear, indicate it explicitly.'
+        },
+        {
+            label: 'Entity Recognition Expert',
+            icon: '🔍',
+            tagline: 'Identifying key entities and relationships',
+            bestFor: 'Named entity recognition, relationship extraction',
+            prompt: 'You are an entity recognition expert. Identify and extract key entities (people, organizations, locations, dates, etc.) from text. Maintain consistency in entity naming and format your output clearly.'
+        }
+    ]
+};
+
 function generateSuggestedPrompts(stats) {
-    const prompts = [];
-    
-    // Based on conversation structure
-    const isMultiTurn = (stats.multi_turn_pct || 0) > 50;
+    // Use ONLY dataset characteristics to suggest prompts (Step 1 happens before task selection)
+    let prompts = [];
+
     const avgOutputTokens = Math.round((stats.avg_output_chars || 200) / 4);
-    
-    // General assistant
-    prompts.push({
-        label: 'General Assistant',
-        prompt: 'You are a helpful, accurate, and concise assistant. Answer questions directly and provide clear explanations when needed.'
-    });
-    
-    // Based on output length - classification vs generation
+    const isMultiTurn = (stats.multi_turn_pct || 0) > 50;
+    const avgInputTokens = Math.round((stats.avg_input_chars || 100) / 4);
+
+    // Detect task type from dataset patterns
     if (avgOutputTokens < 50) {
-        prompts.push({
-            label: 'Classification / Short Response',
-            prompt: 'You are a classification assistant. Analyze the input and provide a brief, accurate response. Be concise and direct.'
-            });
-        } else {
-        prompts.push({
-            label: 'Detailed Response',
-            prompt: 'You are an expert assistant. Provide thorough, well-structured responses. Include relevant details and examples when helpful.'
-        });
+        // Short outputs suggest classification/extraction
+        prompts.push(...TASK_PROMPTS.classify);
+    } else if (isMultiTurn) {
+        // Multi-turn conversations
+        prompts.push(...TASK_PROMPTS.conversation);
+    } else if (avgOutputTokens > 200) {
+        // Long outputs suggest content generation
+        prompts.push(...TASK_PROMPTS.generation);
+    } else {
+        // Medium outputs suggest Q&A
+        prompts.push(...TASK_PROMPTS.qa);
     }
-    
-    // Multi-turn conversation
-    if (isMultiTurn) {
-        prompts.push({
-            label: 'Conversational',
-            prompt: 'You are a friendly conversational assistant. Maintain context across the conversation, ask clarifying questions when needed, and provide helpful responses.'
-        });
-    }
-    
-    // Q&A style
+
+    // Always add a general-purpose option
     prompts.push({
-        label: 'Q&A Assistant',
-        prompt: 'You are a knowledgeable assistant that answers questions accurately. If you are unsure, say so. Provide sources or reasoning when appropriate.'
+        label: 'General Purpose',
+        icon: '⚙️',
+        tagline: 'Flexible assistant for various tasks',
+        bestFor: 'Mixed use cases, general assistance',
+        prompt: 'You are a helpful, accurate, and versatile assistant. Adapt your responses to the user\'s needs, provide clear explanations, and maintain a professional yet friendly tone.'
     });
-    
+
     return prompts;
 }
 
