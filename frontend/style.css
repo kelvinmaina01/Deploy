@@ -108,12 +108,9 @@ body {
 .logo-icon {
     width: 34px;
     height: 34px;
-    background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
-    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
 }
 
 .logo-text {
