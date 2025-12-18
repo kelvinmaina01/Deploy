@@ -79,11 +79,11 @@ def score_task_match(user_task: str, model_key: str) -> float:
     """Score based on task type match (0-20 points)."""
     task_mapping = {
         'classify': {
-            'phi-4-mini': 20,
-            'gemma-3-2b': 10,
-            'llama-3.2-3b': 12,
-            'qwen-2.5-3b': 10,
-            'mistral-7b': 8
+            'phi-4-mini': 18,
+            'gemma-3-2b': 15,
+            'llama-3.2-3b': 16,
+            'qwen-2.5-3b': 14,
+            'mistral-7b': 12
         },
         'qa': {
             'phi-4-mini': 12,
@@ -107,11 +107,11 @@ def score_task_match(user_task: str, model_key: str) -> float:
             'mistral-7b': 20
         },
         'extraction': {
-            'phi-4-mini': 20,
-            'gemma-3-2b': 10,
-            'llama-3.2-3b': 12,
-            'qwen-2.5-3b': 10,
-            'mistral-7b': 15
+            'phi-4-mini': 18,
+            'llama-3.2-3b': 16,
+            'mistral-7b': 15,
+            'qwen-2.5-3b': 14,
+            'gemma-3-2b': 12
         }
     }
     
@@ -139,12 +139,12 @@ def score_dataset_size(num_examples: int, model_key: str) -> float:
             'gemma-3-2b': 5
         }
     else:
-        # Medium dataset - Phi-4 balanced
+        # Medium dataset - More balanced, slight edge to Llama for quality
         scores = {
-            'phi-4-mini': 15,
-            'llama-3.2-3b': 12,
+            'llama-3.2-3b': 15,
+            'phi-4-mini': 12,
+            'mistral-7b': 10,
             'qwen-2.5-3b': 10,
-            'mistral-7b': 8,
             'gemma-3-2b': 8
         }
     
@@ -158,14 +158,16 @@ def score_output_characteristics(characteristics: Dict, model_key: str) -> float
     avg_response_length = characteristics.get('avg_response_length', 0)
     looks_like_json = characteristics.get('looks_like_json_output', False)
     
-    # Short responses favor Phi-4
+    # Short responses favor smaller models
     if avg_response_length < 50:
         if model_key == 'phi-4-mini':
-            score += 15
+            score += 12
         elif model_key == 'gemma-3-2b':
+            score += 12
+        elif model_key == 'llama-3.2-3b':
             score += 10
         else:
-            score += 5
+            score += 8
     
     # Long responses favor Mistral
     elif avg_response_length > 200:
@@ -176,14 +178,16 @@ def score_output_characteristics(characteristics: Dict, model_key: str) -> float
         else:
             score += 5
     
-    # JSON output favors Phi-4
+    # JSON output favors structured output models
     if looks_like_json:
         if model_key == 'phi-4-mini':
-            score += 15
-        elif model_key in ['llama-3.2-3b', 'mistral-7b']:
+            score += 12
+        elif model_key == 'llama-3.2-3b':
+            score += 12
+        elif model_key == 'mistral-7b':
             score += 10
         else:
-            score += 5
+            score += 8
     
     return min(score, 15)  # Cap at 15
 
@@ -229,17 +233,21 @@ def score_classification_patterns(characteristics: Dict, model_key: str) -> floa
     
     if looks_like_classification:
         if model_key == 'phi-4-mini':
-            score += 10
+            score += 8
         elif model_key == 'gemma-3-2b':
+            score += 8
+        elif model_key == 'llama-3.2-3b':
             score += 7
         else:
-            score += 5
+            score += 6
     
     if num_unique_responses < 10:
         if model_key == 'phi-4-mini':
-            score += 10
+            score += 7
         elif model_key == 'gemma-3-2b':
             score += 7
+        elif model_key == 'llama-3.2-3b':
+            score += 6
         else:
             score += 5
     
@@ -252,11 +260,22 @@ def score_speed_efficiency(num_examples: int, model_key: str) -> float:
         if model_key == 'gemma-3-2b':
             return 10
         elif model_key == 'phi-4-mini':
-            return 7
+            return 8
+        elif model_key == 'llama-3.2-3b':
+            return 5
         else:
-            return 3
+            return 4
     
-    return 0  # Larger datasets don't prioritize speed as much
+    # For larger datasets, give slight bonus to faster models
+    elif num_examples < 1000:
+        if model_key == 'gemma-3-2b':
+            return 5
+        elif model_key == 'phi-4-mini':
+            return 4
+        else:
+            return 2
+    
+    return 0  # Very large datasets don't prioritize speed
 
 
 def score_deployment_match(deployment_target: str, model_key: str) -> float:
@@ -301,11 +320,11 @@ def score_deployment_match(deployment_target: str, model_key: str) -> float:
             'mistral-7b': 0
         },
         'desktop_app': {
-            'phi-4-mini': 15,  # Balanced performance
-            'gemma-3-2b': 12,  # Fast inference
-            'llama-3.2-3b': 12,  # High quality
-            'qwen-2.5-3b': 10,  # Multilingual option
-            'mistral-7b': 8  # Best quality if hardware allows
+            'mistral-7b': 15,  # Best quality if hardware allows
+            'llama-3.2-3b': 14,  # High quality
+            'qwen-2.5-3b': 12,  # Multilingual option
+            'phi-4-mini': 12,  # Balanced performance
+            'gemma-3-2b': 10  # Fast inference
         }
     }
     
