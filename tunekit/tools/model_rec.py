@@ -474,19 +474,6 @@ def build_response(
     # Confidence based on score
     confidence = 'high' if score >= 80 else ('medium' if score >= 60 else 'low')
     
-    # Build alternatives with MMLU and context window
-    formatted_alternatives = []
-    if alternatives:
-        for alt in alternatives:
-            alt_model = MODELS.get(alt.get('model'))
-            if alt_model:
-                formatted_alternatives.append({
-                    'model_name': alt_model['name'],
-                    'score': round(alt.get('score', 0) / 100, 2),
-                    'reasons': alt.get('reasons', ['Good alternative']),
-                    'context_window': alt_model.get('context_window', 0)
-                })
-    
     # Format context window for display
     def format_context_window(tokens):
         if tokens >= 100000:
@@ -495,6 +482,23 @@ def build_response(
             return f"{tokens // 1000}K"
         else:
             return str(tokens)
+    
+    # Build alternatives with all required fields
+    formatted_alternatives = []
+    if alternatives:
+        for alt in alternatives:
+            alt_model = MODELS.get(alt.get('model'))
+            if alt_model:
+                ctx_window = alt_model.get('context_window', 0)
+                formatted_alternatives.append({
+                    'model_id': alt_model['id'],
+                    'model_name': alt_model['name'],
+                    'size': alt_model['size'],
+                    'score': round(alt.get('score', 0) / 100, 2),
+                    'reasons': alt.get('reasons', ['Good alternative']),
+                    'context_window': ctx_window,
+                    'context_window_formatted': format_context_window(ctx_window)
+                })
     
     return {
         'primary_recommendation': {

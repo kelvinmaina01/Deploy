@@ -401,9 +401,48 @@
                         <!-- Alternatives -->
                         <div class="card alternatives-card">
                             <h4 class="card-title">Alternative Models</h4>
+                            <p class="alternatives-hint">Click a model to learn more</p>
                             <div class="alternatives-list" id="alternativesGrid"></div>
                         </div>
                 </div>
+                </div>
+
+                <!-- Alternative Model Modal -->
+                <div class="modal-overlay hidden" id="altModelModal">
+                    <div class="modal-content alt-model-modal">
+                        <div class="modal-header">
+                            <div class="modal-model-info">
+                                <h3 id="altModalModelName">-</h3>
+                                <span class="modal-model-size" id="altModalModelSize">-</span>
+                            </div>
+                            <div class="modal-score-ring">
+                                <svg viewBox="0 0 36 36" width="60" height="60">
+                                    <path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    <path class="score-fill" id="altModalScoreCircle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                </svg>
+                                <span class="modal-score-text" id="altModalScore">-</span>
+                            </div>
+                        </div>
+                        <div class="modal-body">
+                            <div class="modal-section">
+                                <h4>Why choose this model?</h4>
+                                <div class="modal-reasons" id="altModalReasons"></div>
+                            </div>
+                            <div class="modal-section">
+                                <div class="modal-spec">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                    </svg>
+                                    <span>Context Window: <strong id="altModalContext">-</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-ghost" id="altModalCancel">Keep Best Match</button>
+                            <button class="btn btn-primary" id="altModalConfirm">Use This Model</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- What Happens Next -->

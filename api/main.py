@@ -89,6 +89,7 @@ class PlanRequest(BaseModel):
     session_id: str
     user_task: Optional[str] = None  # classify, qa, conversation, generation, extraction
     deployment_target: Optional[str] = None  # cloud_api, mobile_app, etc.
+    selected_model_id: Optional[str] = None  # If user chose an alternative model
 
 
 class GenerateRequest(BaseModel):
@@ -632,12 +633,26 @@ async def plan(request: PlanRequest):
     user_task = request.user_task or state.get("user_task", "conversation")
     deployment_target = request.deployment_target or state.get("deployment_target", "not_sure")
     
-    # Set up training configuration based on recommendation
-    model_id = primary_rec.get("model_id", "microsoft/Phi-4-mini-instruct")
+    # Check if user selected an alternative model
+    selected_model_id = request.selected_model_id
+    selected_model_name = primary_rec.get('model_name', 'Phi-4 Mini')
+    
+    if selected_model_id:
+        # User chose an alternative model
+        model_id = selected_model_id
+        # Try to find the model name from alternatives
+        alternatives = recommendation.get("alternatives", [])
+        for alt in alternatives:
+            if alt.get("model_id") == selected_model_id:
+                selected_model_name = alt.get("model_name", selected_model_id)
+                break
+    else:
+        # Use the primary recommendation
+        model_id = primary_rec.get("model_id", "microsoft/Phi-4-mini-instruct")
     
     state["final_task_type"] = user_task
     state["base_model"] = model_id
-    state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {primary_rec.get('model_name', 'Phi-4 Mini')}."
+    state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {selected_model_name}."
     
     # Create training config for chat-based fine-tuning with LoRA
     state["training_config"] = {

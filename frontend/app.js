@@ -19,6 +19,8 @@ let selectedDeployment = null;
 // Analysis data
 let analysisData = null;
 let recommendationData = null;
+let selectedModelData = null; // The currently selected model (could be primary or alternative)
+let allModelsData = []; // All models (primary + alternatives) for easy switching
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
@@ -933,6 +935,9 @@ async function getRecommendation() {
     }
 }
 
+// Store the original best match separately
+let originalBestMatch = null;
+
 function displayRecommendation(data) {
     const rec = data.recommendation?.primary_recommendation;
     
@@ -941,65 +946,98 @@ function displayRecommendation(data) {
         return;
     }
     
+    // Store original best match (never changes)
+    originalBestMatch = { ...rec, isOriginalBestMatch: true };
+    
+    // Store all models for later switching
+    const alternatives = data.recommendation?.alternatives || [];
+    allModelsData = [
+        { ...rec, isOriginalBestMatch: true },
+        ...alternatives.map(alt => ({ ...alt, isOriginalBestMatch: false }))
+    ];
+    
+    // Set initial selected model to primary (which is also best match initially)
+    selectedModelData = { ...rec, isOriginalBestMatch: true };
+    
+    // Display primary recommendation
+    updatePrimaryDisplay(selectedModelData);
+    
+    // Render alternatives (excluding the selected model)
+    updateAlternativesList();
+}
+
+function formatContextWindow(tokens) {
+    if (!tokens) return '-';
+    if (tokens >= 100000) {
+        return `${Math.round(tokens / 1000)}K`;
+    } else if (tokens >= 1000) {
+        return `${Math.round(tokens / 1000)}K`;
+    } else {
+        return `${tokens}`;
+    }
+}
+
+function updatePrimaryDisplay(model) {
     // Model name and size
-    document.getElementById('recModelName').textContent = rec.model_name;
-    document.getElementById('recModelSize').textContent = rec.size;
+    document.getElementById('recModelName').textContent = model.model_name || '-';
+    document.getElementById('recModelSize').textContent = model.size || '-';
     
     // Score with animation
-    const scorePercent = Math.round((rec.score || 0) * 100);
+    const scorePercent = Math.round((model.score || 0) * 100);
     document.getElementById('recScore').textContent = scorePercent + '%';
     
     // Animate score ring
     const scoreCircle = document.getElementById('scoreCircle');
-    setTimeout(() => {
-        scoreCircle.style.strokeDasharray = `${scorePercent}, 100`;
-    }, 100);
+    scoreCircle.style.strokeDasharray = `${scorePercent}, 100`;
     
     // Reasons
     const reasonsContainer = document.getElementById('recReasons');
     reasonsContainer.innerHTML = '';
-    (rec.reasons || []).forEach(reason => {
+    (model.reasons || []).forEach(reason => {
         const div = document.createElement('div');
         div.className = 'rec-reason';
         div.innerHTML = `<span class="reason-icon">✓</span><span>${reason}</span>`;
         reasonsContainer.appendChild(div);
     });
     
-    // Helper function to format context window
-    function formatContextWindow(tokens) {
-        if (!tokens) return '-';
-        if (tokens >= 100000) {
-            return `${tokens / 1000}K tokens`;
-        } else if (tokens >= 1000) {
-            return `${tokens / 1000}K tokens`;
+    // Context Window - use formatted or format it
+    const contextText = model.context_window_formatted || formatContextWindow(model.context_window || 0);
+    document.getElementById('recContext').textContent = contextText;
+    
+    // Update badge based on whether this is the original best match
+    const badge = document.querySelector('.rec-badge');
+    if (badge) {
+        if (model.isOriginalBestMatch) {
+            badge.textContent = 'Best Match';
+            badge.classList.remove('selected-alt');
         } else {
-            return `${tokens} tokens`;
+            badge.textContent = 'Your Selection';
+            badge.classList.add('selected-alt');
         }
     }
-    
-    // Context Window
-    document.getElementById('recContext').textContent = rec.context_window_formatted || formatContextWindow(rec.context_window || 0);
-    
-    // Alternatives
+}
+
+function updateAlternativesList() {
     const altGrid = document.getElementById('alternativesGrid');
     altGrid.innerHTML = '';
     
-    const alternatives = data.recommendation?.alternatives || [];
-    alternatives.slice(0, 3).forEach(alt => {
+    // Get all models except the currently selected one
+    const currentModelId = selectedModelData?.model_id;
+    const alternativesToShow = allModelsData.filter(m => m.model_id !== currentModelId);
+    
+    alternativesToShow.slice(0, 3).forEach((alt) => {
         const div = document.createElement('div');
         div.className = 'alt-card';
         
-        // Format context window for alternative
-        const formatAltContext = (tokens) => {
-            if (!tokens) return '-';
-            if (tokens >= 100000) return `${tokens / 1000}K`;
-            if (tokens >= 1000) return `${tokens / 1000}K`;
-            return `${tokens}`;
-        };
+        // Add a special indicator if this is the original best match
+        const isBestMatch = alt.isOriginalBestMatch;
         
         div.innerHTML = `
             <div class="alt-header">
-                <span class="alt-name">${alt.model_name}</span>
+                <div class="alt-name-container">
+                    <span class="alt-name">${alt.model_name}</span>
+                    ${isBestMatch ? '<span class="alt-best-match-tag">Best Match</span>' : ''}
+                </div>
                 <div class="alt-score-ring">
                     <svg viewBox="0 0 36 36" width="40" height="40">
                         <path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
@@ -1009,9 +1047,84 @@ function displayRecommendation(data) {
                 </div>
             </div>
         `;
+        
+        // Add click handler to open modal
+        div.addEventListener('click', () => openAltModelModal(alt));
+        
         altGrid.appendChild(div);
     });
 }
+
+function openAltModelModal(model) {
+    const modal = document.getElementById('altModelModal');
+    
+    // Populate modal
+    document.getElementById('altModalModelName').textContent = model.model_name || '-';
+    document.getElementById('altModalModelSize').textContent = model.size || '-';
+    
+    const scorePercent = Math.round((model.score || 0) * 100);
+    document.getElementById('altModalScore').textContent = scorePercent + '%';
+    document.getElementById('altModalScoreCircle').style.strokeDasharray = `${scorePercent}, 100`;
+    
+    // Reasons
+    const reasonsContainer = document.getElementById('altModalReasons');
+    reasonsContainer.innerHTML = '';
+    (model.reasons || []).forEach(reason => {
+        const div = document.createElement('div');
+        div.className = 'modal-reason';
+        div.innerHTML = `<span class="reason-icon">✓</span><span>${reason}</span>`;
+        reasonsContainer.appendChild(div);
+    });
+    
+    // Context
+    document.getElementById('altModalContext').textContent = model.context_window_formatted || formatContextWindow(model.context_window || 0);
+    
+    // Store the model for confirmation
+    modal.dataset.pendingModel = JSON.stringify(model);
+    
+    // Show modal
+    modal.classList.remove('hidden');
+}
+
+function closeAltModelModal() {
+    const modal = document.getElementById('altModelModal');
+    modal.classList.add('hidden');
+    modal.dataset.pendingModel = '';
+}
+
+function confirmAltModel() {
+    const modal = document.getElementById('altModelModal');
+    const modelData = JSON.parse(modal.dataset.pendingModel || '{}');
+    
+    if (modelData.model_name) {
+        // Update selected model (preserve isOriginalBestMatch flag)
+        selectedModelData = { ...modelData };
+        
+        // Update the primary display
+        updatePrimaryDisplay(selectedModelData);
+        
+        // Update alternatives list (will now include the previous selection and exclude new one)
+        updateAlternativesList();
+        
+        // Also update recommendationData so training uses the correct model
+        if (recommendationData && recommendationData.recommendation) {
+            recommendationData.recommendation.selected_model = selectedModelData;
+        }
+    }
+    
+    closeAltModelModal();
+}
+
+// Alt model modal event listeners
+document.getElementById('altModalCancel')?.addEventListener('click', closeAltModelModal);
+document.getElementById('altModalConfirm')?.addEventListener('click', confirmAltModel);
+
+// Close modal on overlay click
+document.getElementById('altModelModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'altModelModal') {
+        closeAltModelModal();
+    }
+});
 
 function displayDatasetSummary(analysis) {
     const summaryGrid = document.getElementById('datasetSummary');
@@ -1079,15 +1192,22 @@ async function startCloudTraining() {
     trainCloudBtn.querySelector('.btn-loader').classList.remove('hidden');
     
     try {
-        // First, create the plan
+        // First, create the plan (include selected model if user chose an alternative)
+        const planBody = {
+            session_id: sessionId,
+            user_task: selectedTask,
+            deployment_target: selectedDeployment
+        };
+        
+        // If user selected an alternative model, include it
+        if (selectedModelData && selectedModelData.model_id) {
+            planBody.selected_model_id = selectedModelData.model_id;
+        }
+        
         const planResponse = await fetch(`${API_URL}/plan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: sessionId,
-                user_task: selectedTask,
-                deployment_target: selectedDeployment
-            })
+            body: JSON.stringify(planBody)
         });
         
         if (!planResponse.ok) {
@@ -1327,6 +1447,9 @@ document.getElementById('startOver')?.addEventListener('click', () => {
     selectedDeployment = null;
     analysisData = null;
     recommendationData = null;
+    selectedModelData = null;
+    allModelsData = [];
+    originalBestMatch = null;
     
     if (statusPollInterval) {
         clearInterval(statusPollInterval);
