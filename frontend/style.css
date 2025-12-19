@@ -1999,10 +1999,11 @@ body {
     color: var(--text-secondary);
     transition: transform var(--duration) var(--ease);
     flex-shrink: 0;
+    transform: rotate(0deg); /* Pointing down when expanded (default) */
 }
 
 .training-info-card.collapsed .toggle-icon {
-    transform: rotate(-90deg);
+    transform: rotate(-90deg); /* Pointing right when collapsed */
 }
 
 .training-info-card.collapsed .training-info-content {
@@ -2303,91 +2304,155 @@ body {
 }
 
 /* LoRA Callout */
-.lora-callout {
+/* LoRA Section */
+.lora-section {
     display: flex;
+    flex-direction: column;
     gap: 16px;
-    padding: 16px 20px;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: var(--radius-md);
-    border-left: 4px solid var(--accent);
-}
-
-.callout-icon {
-    font-size: 24px;
-    flex-shrink: 0;
-}
-
-.callout-content {
-    flex: 1;
-}
-
-.callout-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 6px;
-}
-
-.callout-text {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.6;
-}
-
-.callout-text strong {
-    color: var(--accent);
-    font-weight: 600;
-}
-
-/* Export Format Preview */
-.export-preview {
     padding: 20px;
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
 }
 
-.export-preview-title {
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.section-icon {
+    font-size: 20px;
+}
+
+.section-header h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.section-description {
     font-size: 13px;
     color: var(--text-secondary);
-    margin-bottom: 16px;
-    text-align: center;
+    line-height: 1.6;
+    margin: 0;
 }
 
-.export-formats {
-    display: flex;
-    justify-content: center;
-    gap: 24px;
-}
-
-.export-format {
+.lora-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 24px;
+    gap: 10px;
+}
+
+.lora-features li {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.lora-explanation {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--accent);
+}
+
+.explanation-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.explanation-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.explanation-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Export Section */
+.export-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.export-formats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.export-format-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     transition: all var(--duration) var(--ease);
-    cursor: default;
 }
 
-.export-format:hover {
+.export-format-card:hover {
     border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.export-format-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .export-icon {
-    font-size: 32px;
+    font-size: 20px;
 }
 
 .export-label {
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+.export-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.export-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.export-desc {
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+
+.export-note {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin: 0;
+    font-style: italic;
 }
 
 /* Dataset Summary */

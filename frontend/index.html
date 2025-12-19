@@ -407,7 +407,7 @@
                 </div>
 
                 <!-- What Happens Next -->
-                <div class="card training-info-card">
+                <div class="card training-info-card collapsed">
                     <div class="training-info-header" id="trainingInfoToggle">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
@@ -419,32 +419,62 @@
                         </svg>
                     </div>
                     <div class="training-info-content" id="trainingInfoContent">
-                        <!-- Why LoRA Callout -->
-                        <div class="lora-callout">
-                            <div class="callout-icon">💡</div>
-                            <div class="callout-content">
-                                <div class="callout-title">Why LoRA?</div>
-                                <div class="callout-text">Trains <strong>1000x fewer parameters</strong> than full fine-tuning while maintaining quality</div>
+                        <!-- Fine-Tuning with LoRA -->
+                        <div class="lora-section">
+                            <div class="section-header">
+                                <span class="section-icon">🔧</span>
+                                <h4>Fine-Tuning with LoRA</h4>
+                            </div>
+                            <p class="section-description">Your model will be fine-tuned using LoRA (Low-Rank Adaptation):</p>
+                         
+                            <div class="lora-explanation">
+                                <span class="explanation-icon">💡</span>
+                                <div class="explanation-text">
+                                    <strong>Why this matters:</strong> LoRA trains small adapter layers instead of modifying the base model. This reduces trainable parameters by 99.9%, speeds up training, and produces a compact 50MB file that works with the original model.
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Export Format Preview -->
-                        <div class="export-preview">
-                            <div class="export-preview-title">After training, choose your export format:</div>
-                            <div class="export-formats">
-                                <div class="export-format">
-                                    <div class="export-icon">📱</div>
-                                    <div class="export-label">Mobile</div>
+                        <!-- Export & Deployment -->
+                        <div class="export-section">
+                            <div class="section-header">
+                                <span class="section-icon">📦</span>
+                                <h4>Export & Deployment</h4>
+                            </div>
+                            <p class="section-description">After training, choose your deployment format:</p>
+                            <div class="export-formats-grid">
+                                <div class="export-format-card">
+                                    <div class="export-format-header">
+                                        <span class="export-icon">📱</span>
+                                        <span class="export-label">Mobile</span>
+                                    </div>
+                                    <div class="export-details">
+                                        <div class="export-type">INT4</div>
+                                        <div class="export-desc">Smallest</div>
+                                    </div>
                                 </div>
-                                <div class="export-format">
-                                    <div class="export-icon">💻</div>
-                                    <div class="export-label">Desktop</div>
+                                <div class="export-format-card">
+                                    <div class="export-format-header">
+                                        <span class="export-icon">💻</span>
+                                        <span class="export-label">Desktop</span>
+                                    </div>
+                                    <div class="export-details">
+                                        <div class="export-type">INT8</div>
+                                        <div class="export-desc">Balanced</div>
+                                    </div>
                                 </div>
-                                <div class="export-format">
-                                    <div class="export-icon">☁️</div>
-                                    <div class="export-label">Cloud</div>
+                                <div class="export-format-card">
+                                    <div class="export-format-header">
+                                        <span class="export-icon">☁️</span>
+                                        <span class="export-label">Cloud</span>
+                                    </div>
+                                    <div class="export-details">
+                                        <div class="export-type">FP16</div>
+                                        <div class="export-desc">Best quality</div>
+                                    </div>
                                 </div>
                             </div>
+                            <p class="export-note">Export to multiple formats from one training.</p>
                         </div>
                     </div>
                 </div>
