@@ -659,8 +659,6 @@ async def plan(request: PlanRequest):
             "lora_dropout": 0.05,
             "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
         },
-        "est_time_minutes": primary_rec.get("training_time_min", 5),
-        "est_cost_usd": primary_rec.get("cost_usd", 0.20),
     }
     
     # Save updated state

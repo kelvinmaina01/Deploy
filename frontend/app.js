@@ -48,13 +48,21 @@ function setStep(step) {
         }
     });
     
-    // Update sidebar navigation
-    document.querySelectorAll('.nav-step').forEach((el, i) => {
+    // Update top progress bar
+    document.querySelectorAll('.progress-step-nav').forEach((el, i) => {
         el.classList.remove('active', 'completed');
         if (i + 1 < step) {
             el.classList.add('completed');
         } else if (i + 1 === step) {
             el.classList.add('active');
+        }
+    });
+    
+    // Update connector lines
+    document.querySelectorAll('.progress-connector').forEach((el, i) => {
+        el.classList.remove('completed');
+        if (i + 1 < step) {
+            el.classList.add('completed');
         }
     });
     
@@ -957,10 +965,20 @@ function displayRecommendation(data) {
         reasonsContainer.appendChild(div);
     });
     
-    // Stats
-    document.getElementById('recTime').textContent = `~${rec.training_time_min || 3} min`;
-    document.getElementById('recCost').textContent = `$${(rec.cost_usd || 0.18).toFixed(2)}`;
-    document.getElementById('recAccuracy').textContent = `~${rec.estimated_accuracy || 87}%`;
+    // Helper function to format context window
+    function formatContextWindow(tokens) {
+        if (!tokens) return '-';
+        if (tokens >= 100000) {
+            return `${tokens / 1000}K tokens`;
+        } else if (tokens >= 1000) {
+            return `${tokens / 1000}K tokens`;
+        } else {
+            return `${tokens} tokens`;
+        }
+    }
+    
+    // Context Window
+    document.getElementById('recContext').textContent = rec.context_window_formatted || formatContextWindow(rec.context_window || 0);
     
     // Alternatives
     const altGrid = document.getElementById('alternativesGrid');
@@ -970,13 +988,25 @@ function displayRecommendation(data) {
     alternatives.slice(0, 3).forEach(alt => {
         const div = document.createElement('div');
         div.className = 'alt-card';
+        
+        // Format context window for alternative
+        const formatAltContext = (tokens) => {
+            if (!tokens) return '-';
+            if (tokens >= 100000) return `${tokens / 1000}K`;
+            if (tokens >= 1000) return `${tokens / 1000}K`;
+            return `${tokens}`;
+        };
+        
         div.innerHTML = `
             <div class="alt-header">
                 <span class="alt-name">${alt.model_name}</span>
-                <span class="alt-score">${Math.round((alt.score || 0) * 100)}%</span>
-        </div>
-            <div class="alt-reasons">
-                ${(alt.reasons || []).slice(0, 2).map(r => `<span class="alt-reason">${r}</span>`).join('')}
+                <div class="alt-score-ring">
+                    <svg viewBox="0 0 36 36" width="40" height="40">
+                        <path class="score-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        <path class="score-fill" stroke-dasharray="${Math.round((alt.score || 0) * 100)}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                    </svg>
+                    <span class="alt-score-text">${Math.round((alt.score || 0) * 100)}%</span>
+                </div>
             </div>
         `;
         altGrid.appendChild(div);
@@ -1339,3 +1369,21 @@ async function checkBackend() {
 }
 
 checkBackend();
+
+// Initialize progress bar to step 1
+setStep(1);
+
+// ============================================================================
+// TRAINING INFO TOGGLE
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    const trainingInfoToggle = document.getElementById('trainingInfoToggle');
+    const trainingInfoCard = trainingInfoToggle?.closest('.training-info-card');
+    
+    if (trainingInfoToggle && trainingInfoCard) {
+        trainingInfoToggle.addEventListener('click', () => {
+            trainingInfoCard.classList.toggle('collapsed');
+        });
+    }
+});

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TuneKit - Fine-Tune AI Models</title>
+    <title>TuneKit - Fine-Tuning SLMs</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="/static/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,25 +24,47 @@
                 </a>
                 
                 <nav class="nav-steps">
-                    <a href="#" class="nav-step active" data-step="1">
-                        <span class="step-indicator">1</span>
-                        <span class="step-label">Upload Data</span>
-                    </a>
-                    <div class="step-connector"></div>
-                    <a href="#" class="nav-step" data-step="2">
-                        <span class="step-indicator">2</span>
-                        <span class="step-label">Configure</span>
-                    </a>
-                    <div class="step-connector"></div>
-                    <a href="#" class="nav-step" data-step="3">
-                        <span class="step-indicator">3</span>
-                        <span class="step-label">Recommendation</span>
-                    </a>
-                    <div class="step-connector"></div>
-                    <a href="#" class="nav-step" data-step="4">
-                        <span class="step-indicator">4</span>
-                        <span class="step-label">Training</span>
-                    </a>
+                    <div class="progress-bar-container" id="progressBar">
+                        <div class="progress-step-nav" data-step="1">
+                            <div class="progress-dot-nav">
+                                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <div class="pulse-ring-nav"></div>
+                            </div>
+                            <span class="step-label-nav">Upload Data</span>
+                        </div>
+                        <div class="progress-connector"></div>
+                        <div class="progress-step-nav" data-step="2">
+                            <div class="progress-dot-nav">
+                                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <div class="pulse-ring-nav"></div>
+                            </div>
+                            <span class="step-label-nav">Configure</span>
+                        </div>
+                        <div class="progress-connector"></div>
+                        <div class="progress-step-nav" data-step="3">
+                            <div class="progress-dot-nav">
+                                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <div class="pulse-ring-nav"></div>
+                            </div>
+                            <span class="step-label-nav">Recommendation</span>
+                        </div>
+                        <div class="progress-connector"></div>
+                        <div class="progress-step-nav" data-step="4">
+                            <div class="progress-dot-nav">
+                                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <div class="pulse-ring-nav"></div>
+                            </div>
+                            <span class="step-label-nav">Training</span>
+                        </div>
+                    </div>
                 </nav>
 
                 <div class="nav-actions">
@@ -366,27 +388,65 @@
                             </div>
                             <div class="rec-reasons" id="recReasons"></div>
                             <div class="rec-metrics">
-                                <div class="metric">
-                                    <span class="metric-value" id="recTime">~3 min</span>
-                                    <span class="metric-label">Training Time</span>
-                        </div>
-                                <div class="metric">
-                                    <span class="metric-value" id="recCost">$0.18</span>
-                                    <span class="metric-label">Est. Cost</span>
+                                <div class="rec-metric">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                    </svg>
+                                    <span>Context Window: <strong id="recContext">-</strong></span>
+                                </div>
                             </div>
-                                <div class="metric">
-                                    <span class="metric-value" id="recAccuracy">~87%</span>
-                                    <span class="metric-label">Accuracy</span>
-                        </div>
-                    </div>
                 </div>
 
                         <!-- Alternatives -->
                         <div class="card alternatives-card">
                             <h4 class="card-title">Alternative Models</h4>
                             <div class="alternatives-list" id="alternativesGrid"></div>
-                    </div>
+                        </div>
                 </div>
+                </div>
+
+                <!-- What Happens Next -->
+                <div class="card training-info-card">
+                    <div class="training-info-header" id="trainingInfoToggle">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                        </svg>
+                        <h3>What Happens Next</h3>
+                        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="training-info-content" id="trainingInfoContent">
+                        <!-- Why LoRA Callout -->
+                        <div class="lora-callout">
+                            <div class="callout-icon">💡</div>
+                            <div class="callout-content">
+                                <div class="callout-title">Why LoRA?</div>
+                                <div class="callout-text">Trains <strong>1000x fewer parameters</strong> than full fine-tuning while maintaining quality</div>
+                            </div>
+                        </div>
+
+                        <!-- Export Format Preview -->
+                        <div class="export-preview">
+                            <div class="export-preview-title">After training, choose your export format:</div>
+                            <div class="export-formats">
+                                <div class="export-format">
+                                    <div class="export-icon">📱</div>
+                                    <div class="export-label">Mobile</div>
+                                </div>
+                                <div class="export-format">
+                                    <div class="export-icon">💻</div>
+                                    <div class="export-label">Desktop</div>
+                                </div>
+                                <div class="export-format">
+                                    <div class="export-icon">☁️</div>
+                                    <div class="export-label">Cloud</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="action-bar">

@@ -15,40 +15,55 @@ MODELS = {
         'id': 'microsoft/Phi-4-mini-instruct',
         'name': 'Phi-4 Mini',
         'size': '3.8B',
-        'training_time_base': 3,
-        'cost_base': 0.18,
+        'context_window': 128000,  # tokens (128K)
+        'training_time_base': 3,  # minutes for 200 examples
+        'cost_base': 0.036,  # (3/60) × $0.60 × 1.2 overhead
+        'gpu_tier': 'A10G',
+        'memory_gb': 12,
         'accuracy_baseline': 87
     },
     'gemma-3-2b': {
         'id': 'google/gemma-3-2b-it',
         'name': 'Gemma 3 2B',
         'size': '2B',
-        'training_time_base': 2,
-        'cost_base': 0.12,
+        'context_window': 8192,  # tokens (8K)
+        'training_time_base': 2,  # minutes for 200 examples
+        'cost_base': 0.012,  # (2/60) × $0.30 × 1.2 overhead
+        'gpu_tier': 'T4',
+        'memory_gb': 6,
         'accuracy_baseline': 82
     },
     'llama-3.2-3b': {
         'id': 'meta-llama/Llama-3.2-3B-Instruct',
         'name': 'Llama 3.2 3B',
         'size': '3B',
-        'training_time_base': 4,
-        'cost_base': 0.20,
+        'context_window': 128000,  # tokens (128K)
+        'training_time_base': 4,  # minutes for 200 examples
+        'cost_base': 0.048,  # (4/60) × $0.60 × 1.2 overhead
+        'gpu_tier': 'A10G',
+        'memory_gb': 10,
         'accuracy_baseline': 89
     },
     'qwen-2.5-3b': {
         'id': 'Qwen/Qwen2.5-3B-Instruct',
         'name': 'Qwen 2.5 3B',
         'size': '3B',
-        'training_time_base': 4,
-        'cost_base': 0.20,
+        'context_window': 32768,  # tokens (32K)
+        'training_time_base': 4,  # minutes for 200 examples
+        'cost_base': 0.048,  # (4/60) × $0.60 × 1.2 overhead
+        'gpu_tier': 'A10G',
+        'memory_gb': 10,
         'accuracy_baseline': 88
     },
     'mistral-7b': {
         'id': 'mistralai/Mistral-7B-Instruct-v0.3',
         'name': 'Mistral 7B',
         'size': '7B',
-        'training_time_base': 6,
-        'cost_base': 0.35,
+        'context_window': 8192,  # tokens (8K)
+        'training_time_base': 6,  # minutes for 200 examples
+        'cost_base': 0.30,  # (6/60) × $2.50 × 1.2 overhead
+        'gpu_tier': 'A100-40GB',
+        'memory_gb': 18,
         'accuracy_baseline': 91
     }
 }
@@ -361,20 +376,57 @@ def generate_reasons(model_key: str, task: str, num_examples: int, avg_response:
     reasons = []
     model = MODELS[model_key]
     
-    # Task-based reason
+    # Task-based reason (expanded)
     task_reasons = {
+        # Classification
         ('phi-4-mini', 'classify'): 'Best for classification tasks',
-        ('phi-4-mini', 'extraction'): 'Excellent at structured extraction',
-        ('llama-3.2-3b', 'qa'): 'Top performer for Q&A tasks',
-        ('llama-3.2-3b', 'conversation'): 'Best for conversational AI',
-        ('mistral-7b', 'generation'): 'Best for long-form generation',
         ('gemma-3-2b', 'classify'): 'Fast and efficient for classification',
+        
+        # Extraction  
+        ('phi-4-mini', 'extraction'): 'Excellent at structured extraction',
+        ('qwen-2.5-3b', 'extraction'): 'Strong JSON/structured output',
+        
+        # Q&A
+        ('llama-3.2-3b', 'qa'): 'Top performer for Q&A tasks',
+        ('mistral-7b', 'qa'): 'Strong reasoning and knowledge base',
+        ('phi-4-mini', 'qa'): 'Excellent reasoning capabilities',
+        
+        # Conversation
+        ('llama-3.2-3b', 'conversation'): 'Best for conversational AI',
+        ('mistral-7b', 'conversation'): 'Natural dialogue and context tracking',
+        ('qwen-2.5-3b', 'conversation'): 'Multilingual conversation support',
+        
+        # Generation
+        ('mistral-7b', 'generation'): 'Best for long-form generation',
+        ('llama-3.2-3b', 'generation'): 'Creative and coherent text generation',
+        ('qwen-2.5-3b', 'generation'): 'Strong multilingual generation',
     }
     reason = task_reasons.get((model_key, task))
     if reason:
         reasons.append(reason)
     else:
         reasons.append(f"Strong performance for {task} tasks")
+    
+    # Model characteristics (after task reason)
+    # Function calling capability
+    if model_key in ['phi-4-mini', 'mistral-7b']:
+        reasons.append('Supports function calling')
+    
+    # Multilingual
+    if model_key == 'qwen-2.5-3b':
+        reasons.append('Multilingual (29 languages)')
+    
+    # Edge/Mobile optimized
+    if model_key in ['gemma-3-2b', 'llama-3.2-3b']:
+        reasons.append('Optimized for on-device deployment')
+    
+    # Large context
+    if model_key in ['phi-4-mini', 'llama-3.2-3b', 'qwen-2.5-3b']:
+        context_window = model.get('context_window', 0)
+        if context_window >= 128000:
+            reasons.append('128K token context window')
+        elif context_window >= 32000:
+            reasons.append('32K token context window')
     
     # Multi-turn reason
     if is_multi_turn and model_key in ['llama-3.2-3b', 'mistral-7b']:
@@ -401,8 +453,10 @@ def generate_reasons(model_key: str, task: str, num_examples: int, avg_response:
         reasons.append(f'Optimized for mobile deployment')
     elif deployment == 'web_browser' and model_key in ['gemma-3-2b', 'phi-4-mini']:
         reasons.append('Runs efficiently in browser')
+    elif deployment == 'edge_device' and model_key == 'gemma-3-2b':
+        reasons.append('Designed for edge devices')
     
-    return reasons[:4]  # Max 4 reasons
+    return reasons[:5]  # Max 5 reasons (increased from 4)
 
 
 def build_response(
@@ -413,55 +467,34 @@ def build_response(
     num_examples: int,
     alternatives: List[Dict] = None
 ) -> Dict:
-    """Build the final response with scaled time/cost estimates."""
+    """Build the final response with model recommendation."""
     
     model = MODELS[primary_key]
-    
-    # Realistic scaling: Training time scales sub-linearly with dataset size
-    # Base values are for ~200 examples
-    # Formula: time = base * sqrt(examples / 200) * size_mult
-    # This accounts for batch processing efficiency at larger scales
-    
-    base_examples = 200
-    examples_ratio = num_examples / base_examples
-    
-    # Sub-linear scaling (square root) for time - larger batches are more efficient
-    time_scale = max(0.7, min(5.0, (examples_ratio ** 0.65)))
-    
-    # Linear scaling for cost (compute hours scale more directly)
-    cost_scale = max(0.5, min(8.0, examples_ratio))
-    
-    # Model size multipliers (larger models take longer and cost more)
-    size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.2, '7B': 2.2}.get(model['size'], 1.0)
-    
-    scaled_time = max(2, round(model['training_time_base'] * time_scale * size_mult))
-    scaled_cost = round(model['cost_base'] * cost_scale * size_mult, 2)
     
     # Confidence based on score
     confidence = 'high' if score >= 80 else ('medium' if score >= 60 else 'low')
     
-    # Accuracy estimate: baseline + small boost based on score
-    # Higher score = better model fit = slightly better accuracy
-    accuracy_boost = min(score / 25, 4)  # Max +4% boost
-    estimated_accuracy = min(model['accuracy_baseline'] + accuracy_boost, 95)
-    
-    # Build alternatives with scaled costs (using same scaling logic)
+    # Build alternatives with MMLU and context window
     formatted_alternatives = []
     if alternatives:
         for alt in alternatives:
             alt_model = MODELS.get(alt.get('model'))
             if alt_model:
-                alt_examples_ratio = num_examples / base_examples
-                alt_time_scale = max(0.7, min(5.0, (alt_examples_ratio ** 0.65)))
-                alt_cost_scale = max(0.5, min(8.0, alt_examples_ratio))
-                alt_size_mult = {'2B': 0.7, '3B': 1.0, '3.8B': 1.2, '7B': 2.2}.get(alt_model['size'], 1.0)
                 formatted_alternatives.append({
                     'model_name': alt_model['name'],
                     'score': round(alt.get('score', 0) / 100, 2),
                     'reasons': alt.get('reasons', ['Good alternative']),
-                    'training_time_min': max(2, round(alt_model['training_time_base'] * alt_time_scale * alt_size_mult)),
-                    'cost_usd': round(alt_model['cost_base'] * alt_cost_scale * alt_size_mult, 2)
+                    'context_window': alt_model.get('context_window', 0)
                 })
+    
+    # Format context window for display
+    def format_context_window(tokens):
+        if tokens >= 100000:
+            return f"{tokens // 1000}K"
+        elif tokens >= 1000:
+            return f"{tokens // 1000}K"
+        else:
+            return str(tokens)
     
     return {
         'primary_recommendation': {
@@ -471,9 +504,8 @@ def build_response(
             'score': round(score / 100, 2),
             'confidence': confidence,
             'reasons': reasons,
-            'training_time_min': scaled_time,
-            'cost_usd': scaled_cost,
-            'estimated_accuracy': round(estimated_accuracy, 1)
+            'context_window': model.get('context_window', 0),
+            'context_window_formatted': format_context_window(model.get('context_window', 0))
         },
         'alternatives': formatted_alternatives,
         'all_scores': {k: round(v / 100, 2) for k, v in all_scores.items()}
