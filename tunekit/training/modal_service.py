@@ -2,6 +2,7 @@
 Modal Service Wrapper
 =====================
 High-level interface for managing training jobs on Modal.
+Updated for Unsloth LoRA training.
 """
 
 import uuid
@@ -22,12 +23,15 @@ def start_training(
     data_path: str,
 ) -> dict:
     """
-    Start a training job on Modal.
+    Start a training job on Modal using Unsloth LoRA.
     
     Args:
-        task_type: "classification", "ner", or "instruction_tuning"
-        config: Training configuration dict
-        data_path: Path to the data file
+        task_type: Task type (now always "chat" for SLM fine-tuning)
+        config: Training configuration dict containing:
+            - model_name: HuggingFace model ID
+            - training_args: Training parameters
+            - lora_config: LoRA parameters (optional, auto-generated in package.py)
+        data_path: Path to the JSONL data file
     
     Returns:
         dict with job_id and status
@@ -39,35 +43,38 @@ def start_training(
     with open(data_path, "r") as f:
         data_content = f.read()
     
-    # Map task type to function name
-    function_map = {
-        "classification": "train_classification",
-        "ner": "train_ner",
-        "instruction_tuning": "train_instruction",
+    # Prepare config for train_chat_lora
+    training_config = {
+        "base_model": config.get("model_name", "microsoft/Phi-4-mini-instruct"),
+        "max_seq_length": config.get("max_seq_length", 2048),
+        "training_args": config.get("training_args", {
+            "num_train_epochs": 3,
+            "per_device_train_batch_size": 2,
+            "gradient_accumulation_steps": 4,
+            "learning_rate": 2e-4,
+        }),
     }
     
-    if task_type not in function_map:
-        return {
-            "job_id": job_id,
-            "status": "failed",
-            "error": f"Unknown task type: {task_type}",
-        }
-    
-    function_name = function_map[task_type]
+    # Add lora_config if provided (otherwise modal_train.py will auto-generate)
+    if "lora_config" in config:
+        training_config["lora_config"] = config["lora_config"]
     
     # Spawn the training job asynchronously
     try:
-        # Look up the deployed function from Modal
-        train_fn = modal.Function.from_name(MODAL_APP_NAME, function_name)
+        # Always use train_chat_lora for SLM fine-tuning
+        print(f"[TuneKit] Starting Unsloth LoRA training for job {job_id}")
+        print(f"[TuneKit] Model: {training_config['base_model']}")
+        
+        train_fn = modal.Function.from_name(MODAL_APP_NAME, "train_chat_lora")
         
         # Spawn async execution
-        function_call = train_fn.spawn(config, data_content, job_id)
+        function_call = train_fn.spawn(training_config, data_content, job_id)
         
         # Store job info
         _jobs[job_id] = {
             "job_id": job_id,
-            "task_type": task_type,
-            "config": config,
+            "task_type": "chat",  # Always chat for SLM fine-tuning
+            "config": training_config,
             "status": "running",
             "started_at": datetime.now().isoformat(),
             "modal_call_id": function_call.object_id,
@@ -82,7 +89,7 @@ def start_training(
         return {
             "job_id": job_id,
             "status": "running",
-            "message": f"Training started for {task_type} task",
+            "message": f"Unsloth LoRA training started for {training_config['base_model']}",
         }
         
     except modal.exception.NotFoundError:
@@ -100,7 +107,7 @@ def start_training(
         error_msg = str(e)
         _jobs[job_id] = {
             "job_id": job_id,
-            "task_type": task_type,
+            "task_type": "chat",
             "status": "failed",
             "started_at": datetime.now().isoformat(),
             "error": error_msg,
@@ -138,11 +145,10 @@ def get_training_status(job_id: str) -> dict:
             "job_id": job_id,
             "status": job["status"],
             "metrics": job.get("metrics"),
-            "base_metrics": job.get("base_metrics"),
-            "finetuned_metrics": job.get("finetuned_metrics"),
-            "improvement": job.get("improvement"),
             "base_model": job.get("base_model"),
             "task_type": job.get("task_type"),
+            "trainable_params": job.get("trainable_params"),
+            "total_params": job.get("total_params"),
             "error": job.get("error"),
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
@@ -160,17 +166,15 @@ def get_training_status(job_id: str) -> dict:
     
     try:
         # Try to get the result with a small timeout
-        # timeout=0.5 gives Modal a moment to return cached results
         result = function_call.get(timeout=0.5)
         
         # If we got here, the job is complete
         job["status"] = result.get("status", "completed")
         job["metrics"] = result.get("metrics")
-        job["base_metrics"] = result.get("base_metrics")
-        job["finetuned_metrics"] = result.get("finetuned_metrics")
-        job["improvement"] = result.get("improvement")
         job["base_model"] = result.get("base_model")
-        job["task_type"] = result.get("task_type", job.get("task_type"))
+        job["task_type"] = result.get("task_type", "chat")
+        job["trainable_params"] = result.get("trainable_params")
+        job["total_params"] = result.get("total_params")
         job["error"] = result.get("error")
         job["completed_at"] = datetime.now().isoformat()
         
@@ -178,18 +182,17 @@ def get_training_status(job_id: str) -> dict:
             "job_id": job_id,
             "status": job["status"],
             "metrics": job.get("metrics"),
-            "base_metrics": job.get("base_metrics"),
-            "finetuned_metrics": job.get("finetuned_metrics"),
-            "improvement": job.get("improvement"),
             "base_model": job.get("base_model"),
             "task_type": job.get("task_type"),
+            "trainable_params": job.get("trainable_params"),
+            "total_params": job.get("total_params"),
             "error": job.get("error"),
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
         }
         
     except (modal.exception.FunctionTimeoutError, TimeoutError):
-        # Job is still running (timeout means result not ready yet)
+        # Job is still running
         return {
             "job_id": job_id,
             "status": "running",
@@ -212,8 +215,7 @@ def get_training_status(job_id: str) -> dict:
         }
         
     except Exception as e:
-        # Unknown error - log it but don't mark as failed yet
-        # It might just be a transient network issue
+        # Unknown error - don't mark as failed yet (might be transient)
         print(f"[TuneKit] Status check error for {job_id}: {type(e).__name__}: {e}")
         return {
             "job_id": job_id,
@@ -246,8 +248,7 @@ def get_model_download_url(job_id: str) -> dict:
                 "error": "Model not ready. Training must be completed first.",
             }
     
-    # Try to get model files from Modal volume directly
-    # This works even if the job isn't in our local memory (e.g., after server restart)
+    # Try to get model files from Modal volume
     try:
         print(f"[TuneKit] Fetching model files from Modal for job: {job_id}")
         get_model_files_fn = modal.Function.from_name(MODAL_APP_NAME, "get_model_files")
@@ -266,7 +267,7 @@ def get_model_download_url(job_id: str) -> dict:
             "status": "ready",
             "files": result.get("files", []),
             "download_endpoint": f"/download-model/{job_id}",
-            "message": "Model ready for download",
+            "message": "LoRA adapter ready for download",
         }
         
     except modal.exception.NotFoundError:
@@ -325,7 +326,7 @@ def download_model_zip_from_modal(job_id: str) -> Optional[bytes]:
     start_time = time.time()
     
     try:
-        # Step 1: Ensure ZIP exists (generates for old models, no-op for new ones)
+        # Step 1: Ensure ZIP exists
         step1_start = time.time()
         print(f"[TuneKit] Step 1: Ensuring ZIP exists for job {job_id}...")
         generate_fn = modal.Function.from_name(MODAL_APP_NAME, "generate_model_zip")
@@ -347,7 +348,7 @@ def download_model_zip_from_modal(job_id: str) -> Optional[bytes]:
         
         total_elapsed = time.time() - start_time
         print(f"[TuneKit] Step 2 complete: Downloaded {len(zip_bytes) if zip_bytes else 0} bytes (took {step2_time:.1f}s)")
-        print(f"[TuneKit] TOTAL TIME: {total_elapsed:.1f}s (Step 1: {step1_time:.1f}s, Step 2: {step2_time:.1f}s)")
+        print(f"[TuneKit] TOTAL TIME: {total_elapsed:.1f}s")
         return zip_bytes
         
     except modal.exception.NotFoundError as e:
@@ -374,7 +375,7 @@ def list_jobs() -> list[dict]:
     return [
         {
             "job_id": job["job_id"],
-            "task_type": job["task_type"],
+            "task_type": job.get("task_type", "chat"),
             "status": job["status"],
             "started_at": job.get("started_at"),
             "completed_at": job.get("completed_at"),
@@ -383,50 +384,54 @@ def list_jobs() -> list[dict]:
     ]
 
 
-def compare_models(job_id: str, text: str) -> dict:
+def test_model_inference(job_id: str, messages: list) -> dict:
     """
-    Compare base model vs fine-tuned model predictions.
+    Test a fine-tuned model with a conversation.
     
     Args:
         job_id: The job identifier for the fine-tuned model
-        text: Input text to run inference on
+        messages: List of messages [{"role": "user", "content": "..."}]
     
     Returns:
-        dict with base and finetuned predictions
+        dict with generated response
     """
-    print(f"[TuneKit] Comparing models for job {job_id}, text: '{text[:50]}...'")
+    print(f"[TuneKit] Testing model for job {job_id}")
     
-    # Get task type from local cache if available, default to classification
-    task_type = "classification"
+    # Check if job is completed
     if job_id in _jobs:
         job = _jobs[job_id]
         if job["status"] != "completed":
-            print(f"[TuneKit] Job {job_id} not completed yet")
             return {
                 "error": "Training not completed yet",
                 "job_id": job_id,
             }
-        task_type = job.get("task_type", "classification")
     
-    # Try to run comparison directly on Modal
-    # This works even if job isn't in local memory (e.g., after server restart)
     try:
-        print(f"[TuneKit] Calling Modal compare_inference for job {job_id}")
-        compare_fn = modal.Function.from_name(MODAL_APP_NAME, "compare_inference")
-        result = compare_fn.remote(job_id, text, task_type)
-        print(f"[TuneKit] Comparison result: {result}")
+        print(f"[TuneKit] Calling Modal test_model for job {job_id}")
+        test_fn = modal.Function.from_name(MODAL_APP_NAME, "test_model")
+        result = test_fn.remote(job_id, messages)
+        print(f"[TuneKit] Test result: {result.get('status')}")
         return result
         
     except modal.exception.NotFoundError:
-        print(f"[TuneKit] Compare function not deployed")
         return {
-            "error": f"Comparison function not deployed. Run: modal deploy tunekit/training/modal_train.py",
+            "error": "Test function not deployed. Run: modal deploy tunekit/training/modal_train.py",
             "job_id": job_id,
         }
         
     except Exception as e:
-        print(f"[TuneKit] Comparison error: {e}")
+        print(f"[TuneKit] Test error: {e}")
         return {
-            "error": f"Comparison failed: {str(e)}",
+            "error": f"Model test failed: {str(e)}",
             "job_id": job_id,
         }
+
+
+# Keep old function name for backward compatibility
+def compare_models(job_id: str, text: str) -> dict:
+    """
+    DEPRECATED: Use test_model_inference instead.
+    Kept for backward compatibility.
+    """
+    messages = [{"role": "user", "content": text}]
+    return test_model_inference(job_id, messages)

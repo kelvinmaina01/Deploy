@@ -1,7 +1,8 @@
 """
-Modal Training Functions
-========================
-GPU-accelerated training functions that run on Modal's serverless infrastructure.
+Modal Training Functions - Unsloth LoRA
+========================================
+GPU-accelerated LoRA fine-tuning using Unsloth on Modal's serverless infrastructure.
+Supports all 5 TuneKit SLMs: Phi-4, Gemma-3, Llama-3.2, Qwen-2.5, Mistral-7B
 """
 
 import modal
@@ -12,18 +13,24 @@ import modal
 
 app = modal.App("tunekit-training")
 
-# Base image with ML dependencies (v2 - force rebuild)
-training_image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch>=2.0.0",
-    "transformers>=4.45.0",  # Updated version
-    "datasets>=2.14.0",
-    "accelerate>=0.24.0",
-    "scikit-learn>=1.3.0",
-    "peft>=0.7.0",
-    "trl>=0.7.0",
-    "bitsandbytes>=0.41.0",
-    "seqeval>=1.2.2",
-    "numpy<2",
+# Unsloth-optimized image with all dependencies
+training_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install(
+        "torch>=2.1.0",
+        "transformers>=4.45.0",
+        "datasets>=2.14.0",
+        "accelerate>=0.24.0",
+        "peft>=0.7.0",
+        "trl>=0.7.0",
+        "bitsandbytes>=0.41.0",
+        "xformers<0.0.27",
+        "sentencepiece",
+        "protobuf",
+    )
+    .pip_install(
+        "unsloth[cu121-ampere-torch230] @ git+https://github.com/unslothai/unsloth.git"
+    )
 )
 
 # Persistent volume for storing trained models
@@ -32,7 +39,401 @@ MODEL_DIR = "/models"
 
 
 # =============================================================================
-# CLASSIFICATION TRAINING
+# MODEL ARCHITECTURE DETECTION
+# =============================================================================
+
+def get_target_modules(model_id: str) -> list:
+    """
+    Get the correct LoRA target modules based on model architecture.
+    
+    - Phi models use fc1/fc2 for MLP layers
+    - Llama, Mistral, Gemma, Qwen use gate_proj/up_proj/down_proj
+    """
+    model_id_lower = model_id.lower()
+    
+    if "phi" in model_id_lower:
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "fc1", "fc2"]
+    else:
+        # Llama, Mistral, Gemma, Qwen
+        return ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+
+def get_gpu_for_model(model_id: str) -> str:
+    """
+    Select appropriate GPU based on model size.
+    
+    - 2B-4B models: T4 (16GB) is sufficient
+    - 7B models: A10G (24GB) recommended
+    """
+    model_id_lower = model_id.lower()
+    
+    if "mistral-7b" in model_id_lower or "7b" in model_id_lower:
+        return "A10G"
+    else:
+        return "T4"
+
+
+# =============================================================================
+# UNSLOTH LORA TRAINING FOR CHAT MODELS
+# =============================================================================
+
+@app.function(
+    image=training_image,
+    gpu="A10G",  # Use A10G for all models to ensure enough VRAM
+    timeout=7200,  # 2 hours max
+    volumes={MODEL_DIR: model_volume},
+    secrets=[modal.Secret.from_name("huggingface-secret", required=False)],
+)
+def train_chat_lora(config: dict, data_content: str, job_id: str) -> dict:
+    """
+    Train a chat model using Unsloth LoRA on Modal GPU.
+    
+    Args:
+        config: Training configuration dict containing:
+            - base_model: HuggingFace model ID (e.g., "microsoft/Phi-4-mini-instruct")
+            - lora_config: LoRA parameters (r, lora_alpha, lora_dropout, target_modules)
+            - training_args: Training parameters (epochs, batch_size, learning_rate, etc.)
+            - max_seq_length: Maximum sequence length (default 2048)
+        data_content: JSONL data as string (each line: {"messages": [...]})
+        job_id: Unique job identifier
+    
+    Returns:
+        dict with status, metrics, and model path
+    """
+    import json
+    import os
+    import tempfile
+    import torch
+    
+    print(f"\n{'='*60}")
+    print(f"🚀 TuneKit Unsloth LoRA Training")
+    print(f"{'='*60}")
+    print(f"Job ID: {job_id}")
+    print(f"Model: {config.get('base_model', 'Unknown')}")
+    print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    print(f"{'='*60}\n")
+    
+    # Write JSONL data to temp file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+        f.write(data_content)
+        data_path = f.name
+    
+    try:
+        # =============================================
+        # 1. LOAD MODEL WITH UNSLOTH
+        # =============================================
+        from unsloth import FastLanguageModel
+        
+        base_model = config.get("base_model", "microsoft/Phi-4-mini-instruct")
+        max_seq_length = config.get("max_seq_length", 2048)
+        
+        print(f"[TuneKit] Loading model: {base_model}")
+        print(f"[TuneKit] Max sequence length: {max_seq_length}")
+        
+        # Load with 4-bit quantization for memory efficiency
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=base_model,
+            max_seq_length=max_seq_length,
+            dtype=None,  # Auto-detect (bf16 if available, else fp16)
+            load_in_4bit=True,
+            trust_remote_code=True,
+        )
+        
+        print(f"[TuneKit] Model loaded successfully!")
+        
+        # =============================================
+        # 2. CONFIGURE LORA
+        # =============================================
+        lora_config = config.get("lora_config", {})
+        
+        # Get model-specific target modules if not provided
+        target_modules = lora_config.get("target_modules")
+        if not target_modules:
+            target_modules = get_target_modules(base_model)
+        
+        r = lora_config.get("r", 16)
+        lora_alpha = lora_config.get("lora_alpha", 16)
+        lora_dropout = lora_config.get("lora_dropout", 0)
+        
+        print(f"\n[TuneKit] LoRA Configuration:")
+        print(f"  - r (rank): {r}")
+        print(f"  - lora_alpha: {lora_alpha}")
+        print(f"  - lora_dropout: {lora_dropout}")
+        print(f"  - target_modules: {target_modules}")
+        
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            target_modules=target_modules,
+            bias="none",
+            use_gradient_checkpointing="unsloth",  # Optimized checkpointing
+            random_state=42,
+            use_rslora=False,
+            loftq_config=None,
+        )
+        
+        # Print trainable parameters
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"[TuneKit] Trainable params: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
+        
+        # =============================================
+        # 3. LOAD AND FORMAT DATASET
+        # =============================================
+        from datasets import Dataset
+        
+        print(f"\n[TuneKit] Loading dataset from {data_path}")
+        
+        # Load JSONL data
+        conversations = []
+        with open(data_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        entry = json.loads(line)
+                        if "messages" in entry:
+                            conversations.append(entry)
+                    except json.JSONDecodeError:
+                        continue
+        
+        print(f"[TuneKit] Loaded {len(conversations)} conversations")
+        
+        if len(conversations) == 0:
+            raise ValueError("No valid conversations found in dataset")
+        
+        # Format conversations using the tokenizer's chat template
+        def format_conversation(example):
+            """Convert messages to the model's chat format."""
+            messages = example["messages"]
+            
+            # Use tokenizer's chat template if available
+            if hasattr(tokenizer, 'apply_chat_template'):
+                try:
+                    text = tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=False
+                    )
+                except Exception:
+                    # Fallback: manual formatting
+                    text = format_messages_manual(messages)
+            else:
+                text = format_messages_manual(messages)
+            
+            return {"text": text}
+        
+        def format_messages_manual(messages):
+            """Manual fallback formatting for chat messages."""
+            formatted = ""
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role == "system":
+                    formatted += f"<|system|>\n{content}\n"
+                elif role == "user":
+                    formatted += f"<|user|>\n{content}\n"
+                elif role == "assistant":
+                    formatted += f"<|assistant|>\n{content}\n"
+            return formatted
+        
+        # Create dataset
+        dataset = Dataset.from_list(conversations)
+        dataset = dataset.map(format_conversation)
+        
+        # Split into train/eval
+        if len(dataset) > 50:
+            split = dataset.train_test_split(test_size=0.1, seed=42)
+            train_dataset = split["train"]
+            eval_dataset = split["test"]
+            print(f"[TuneKit] Train: {len(train_dataset)}, Eval: {len(eval_dataset)}")
+        else:
+            train_dataset = dataset
+            eval_dataset = None
+            print(f"[TuneKit] Train: {len(train_dataset)} (no eval split for small datasets)")
+        
+        # =============================================
+        # 4. CONFIGURE TRAINING
+        # =============================================
+        from trl import SFTTrainer
+        from transformers import TrainingArguments
+        
+        training_args_config = config.get("training_args", {})
+        
+        output_dir = f"{MODEL_DIR}/{job_id}"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Training arguments with Unsloth optimizations
+        num_epochs = training_args_config.get("num_train_epochs", 3)
+        batch_size = training_args_config.get("per_device_train_batch_size", 2)
+        grad_accum = training_args_config.get("gradient_accumulation_steps", 4)
+        learning_rate = training_args_config.get("learning_rate", 2e-4)
+        warmup_steps = training_args_config.get("warmup_steps", 5)
+        
+        print(f"\n[TuneKit] Training Configuration:")
+        print(f"  - Epochs: {num_epochs}")
+        print(f"  - Batch size: {batch_size}")
+        print(f"  - Gradient accumulation: {grad_accum}")
+        print(f"  - Effective batch size: {batch_size * grad_accum}")
+        print(f"  - Learning rate: {learning_rate}")
+        print(f"  - Warmup steps: {warmup_steps}")
+        
+        training_args = TrainingArguments(
+            output_dir=output_dir,
+            num_train_epochs=num_epochs,
+            per_device_train_batch_size=batch_size,
+            gradient_accumulation_steps=grad_accum,
+            learning_rate=learning_rate,
+            warmup_steps=warmup_steps,
+            weight_decay=training_args_config.get("weight_decay", 0.01),
+            logging_steps=training_args_config.get("logging_steps", 10),
+            save_strategy="epoch",
+            eval_strategy="epoch" if eval_dataset else "no",
+            fp16=not torch.cuda.is_bf16_supported(),
+            bf16=torch.cuda.is_bf16_supported(),
+            optim="adamw_8bit",  # Memory-efficient optimizer
+            lr_scheduler_type="linear",
+            seed=42,
+            report_to="none",
+        )
+        
+        # =============================================
+        # 5. TRAIN WITH SFTTRAINER
+        # =============================================
+        print(f"\n[TuneKit] Starting training...")
+        print(f"{'='*60}")
+        
+        trainer = SFTTrainer(
+            model=model,
+            tokenizer=tokenizer,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            dataset_text_field="text",
+            max_seq_length=max_seq_length,
+            args=training_args,
+        )
+        
+        # Train!
+        train_result = trainer.train()
+        
+        print(f"\n{'='*60}")
+        print(f"[TuneKit] Training complete!")
+        print(f"{'='*60}")
+        
+        # =============================================
+        # 6. SAVE MODEL
+        # =============================================
+        print(f"\n[TuneKit] Saving LoRA adapter to {output_dir}")
+        
+        # Save LoRA adapter (small, ~50MB)
+        model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        
+        # Save training config
+        with open(f"{output_dir}/tunekit_config.json", "w") as f:
+            json.dump({
+                "base_model": base_model,
+                "max_seq_length": max_seq_length,
+                "lora_config": {
+                    "r": r,
+                    "lora_alpha": lora_alpha,
+                    "lora_dropout": lora_dropout,
+                    "target_modules": target_modules,
+                },
+                "training_args": {
+                    "num_train_epochs": num_epochs,
+                    "per_device_train_batch_size": batch_size,
+                    "gradient_accumulation_steps": grad_accum,
+                    "learning_rate": learning_rate,
+                },
+                "dataset_size": len(conversations),
+                "job_id": job_id,
+            }, f, indent=2)
+        
+        # =============================================
+        # 7. CREATE ZIP FOR DOWNLOAD
+        # =============================================
+        import zipfile
+        
+        zip_path = f"{output_dir}/model.zip"
+        print(f"[TuneKit] Creating ZIP archive...")
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(output_dir):
+                for file in files:
+                    if file != "model.zip":
+                        filepath = os.path.join(root, file)
+                        arcname = os.path.relpath(filepath, output_dir)
+                        zf.write(filepath, arcname)
+        
+        # Commit to volume
+        model_volume.commit()
+        
+        # =============================================
+        # 8. COLLECT METRICS
+        # =============================================
+        metrics = {
+            "train_loss": train_result.training_loss,
+            "train_runtime": train_result.metrics.get("train_runtime", 0),
+            "train_samples_per_second": train_result.metrics.get("train_samples_per_second", 0),
+            "epochs": num_epochs,
+        }
+        
+        # Eval metrics if available
+        if eval_dataset:
+            eval_results = trainer.evaluate()
+            metrics["eval_loss"] = eval_results.get("eval_loss", 0)
+        
+        print(f"\n[TuneKit] Final Metrics:")
+        for key, value in metrics.items():
+            if isinstance(value, float):
+                print(f"  - {key}: {value:.4f}")
+            else:
+                print(f"  - {key}: {value}")
+        
+        print(f"\n{'='*60}")
+        print(f"✅ Training completed successfully!")
+        print(f"📁 Model saved to: {output_dir}")
+        print(f"{'='*60}\n")
+        
+        return {
+            "status": "completed",
+            "job_id": job_id,
+            "metrics": metrics,
+            "model_path": output_dir,
+            "base_model": base_model,
+            "task_type": "chat",
+            "trainable_params": trainable_params,
+            "total_params": total_params,
+        }
+        
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        error_traceback = traceback.format_exc()
+        
+        print(f"\n{'='*60}")
+        print(f"❌ Training failed!")
+        print(f"{'='*60}")
+        print(f"Error: {error_msg}")
+        print(f"\nTraceback:\n{error_traceback}")
+        
+        return {
+            "status": "failed",
+            "job_id": job_id,
+            "error": error_msg,
+            "traceback": error_traceback,
+        }
+    finally:
+        # Cleanup temp file
+        if os.path.exists(data_path):
+            os.unlink(data_path)
+
+
+# =============================================================================
+# LEGACY TRAINING FUNCTIONS (Kept for backward compatibility)
 # =============================================================================
 
 @app.function(
@@ -43,180 +444,24 @@ MODEL_DIR = "/models"
 )
 def train_classification(config: dict, data_content: str, job_id: str) -> dict:
     """
-    Train a classification model on Modal GPU.
-    
-    Args:
-        config: Training configuration dict
-        data_content: CSV data as string
-        job_id: Unique job identifier
-    
-    Returns:
-        dict with status, metrics, and model path
+    DEPRECATED: Use train_chat_lora instead.
+    Kept for backward compatibility with existing jobs.
     """
-    import json
-    import os
-    import tempfile
-    import numpy as np
-    from datasets import load_dataset
-    from transformers import (
-        AutoTokenizer,
-        AutoModelForSequenceClassification,
-        TrainingArguments,
-        Trainer,
-        DataCollatorWithPadding,
-    )
-    from sklearn.metrics import accuracy_score, f1_score
+    print(f"[TuneKit] WARNING: train_classification is deprecated. Use train_chat_lora instead.")
     
-    print(f"[TuneKit] Starting classification training for job {job_id}")
-    print(f"[TuneKit] Model: {config['base_model']}")
-    
-    # Write data to temp file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-        f.write(data_content)
-        data_path = f.name
-    
-    try:
-        # Load tokenizer and model
-        tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-        model = AutoModelForSequenceClassification.from_pretrained(
-            config["base_model"],
-            num_labels=config["num_labels"],
-        )
-        
-        # Load dataset
-        dataset = load_dataset("csv", data_files=data_path, split="train")
-        
-        # Create label mapping from ALL data BEFORE split
-        labels = sorted(dataset.unique(config["label_column"]))
-        label2id = {label: i for i, label in enumerate(labels)}
-        id2label = {i: label for label, i in label2id.items()}
-        
-        # Now split
-        dataset = dataset.train_test_split(test_size=0.2, seed=42)
-        
-        model.config.label2id = label2id
-        model.config.id2label = id2label
-        
-        def tokenize_function(examples):
-            tokens = tokenizer(
-                examples[config["text_column"]],
-                padding="max_length",
-                truncation=True,
-                max_length=config["max_length"],
-            )
-            tokens["labels"] = [label2id[label] for label in examples[config["label_column"]]]
-            return tokens
-        
-        tokenized = dataset.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=dataset["train"].column_names
-        )
-        
-        def compute_metrics(eval_pred):
-            logits, labels = eval_pred
-            predictions = np.argmax(logits, axis=-1)
-            return {
-                "accuracy": accuracy_score(labels, predictions),
-                "f1": f1_score(labels, predictions, average="weighted"),
-            }
-        
-        # Output directory on the volume
-        output_dir = f"{MODEL_DIR}/{job_id}"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            learning_rate=config["learning_rate"],
-            per_device_train_batch_size=config["batch_size"],
-            per_device_eval_batch_size=config["batch_size"],
-            num_train_epochs=config["num_epochs"],
-            warmup_ratio=config.get("warmup_ratio", 0.1),
-            weight_decay=config.get("weight_decay", 0.01),
-            eval_strategy="epoch",
-            save_strategy="epoch",
-            load_best_model_at_end=True,
-            metric_for_best_model="accuracy",
-            logging_steps=10,
-            report_to="none",
-        )
-        
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized["train"],
-            eval_dataset=tokenized["test"],
-            tokenizer=tokenizer,
-            data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
-            compute_metrics=compute_metrics,
-        )
-        
-        # ============================================
-        # EVALUATE BASE MODEL BEFORE TRAINING
-        # ============================================
-        print("[TuneKit] Evaluating base model (before fine-tuning)...")
-        base_metrics = trainer.evaluate()
-        base_metrics = {k.replace("eval_", ""): v for k, v in base_metrics.items()}
-        print(f"[TuneKit] Base model metrics: {base_metrics}")
-        
-        print("[TuneKit] Training started...")
-        trainer.train()
-        
-        # Save final model
-        trainer.save_model(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        
-        # Save config for reference
-        with open(f"{output_dir}/tunekit_config.json", "w") as f:
-            json.dump(config, f, indent=2)
-        
-        # Commit to volume
-        model_volume.commit()
-        
-        # Final evaluation (after fine-tuning)
-        finetuned_metrics = trainer.evaluate()
-        finetuned_metrics = {k.replace("eval_", ""): v for k, v in finetuned_metrics.items()}
-        print(f"[TuneKit] Fine-tuned model metrics: {finetuned_metrics}")
-        
-        # Calculate improvement (in percentage points, not relative %)
-        # Example: 51.7% -> 95.8% = +44.1 percentage points (not +85.5%)
-        improvement = {}
-        for key in ["accuracy", "f1"]:
-            if key in base_metrics and key in finetuned_metrics:
-                base_val = base_metrics[key]  # Decimal (0-1)
-                tuned_val = finetuned_metrics[key]  # Decimal (0-1)
-                # Convert to percentage points difference
-                improvement_pp = (tuned_val - base_val) * 100
-                improvement[key] = round(improvement_pp, 1)
-        
-        print(f"[TuneKit] Training complete! Improvement: {improvement}")
-        
-        return {
-            "status": "completed",
-            "job_id": job_id,
-            "base_metrics": base_metrics,
-            "finetuned_metrics": finetuned_metrics,
-            "improvement": improvement,
-            "metrics": finetuned_metrics,  # Keep for backward compat
-            "model_path": output_dir,
-            "base_model": config["base_model"],
-            "task_type": "classification",
+    # Redirect to chat training with converted config
+    chat_config = {
+        "base_model": config.get("base_model", "microsoft/Phi-4-mini-instruct"),
+        "max_seq_length": config.get("max_length", 2048),
+        "training_args": {
+            "num_train_epochs": config.get("num_epochs", 3),
+            "per_device_train_batch_size": config.get("batch_size", 2),
+            "learning_rate": config.get("learning_rate", 2e-4),
         }
-        
-    except Exception as e:
-        print(f"[TuneKit] Training failed: {str(e)}")
-        return {
-            "status": "failed",
-            "job_id": job_id,
-            "error": str(e),
-        }
-    finally:
-        os.unlink(data_path)
+    }
+    
+    return train_chat_lora.local(chat_config, data_content, job_id)
 
-
-# =============================================================================
-# NER TRAINING
-# =============================================================================
 
 @app.function(
     image=training_image,
@@ -226,294 +471,46 @@ def train_classification(config: dict, data_content: str, job_id: str) -> dict:
 )
 def train_ner(config: dict, data_content: str, job_id: str) -> dict:
     """
-    Train a NER model on Modal GPU.
+    DEPRECATED: Use train_chat_lora instead.
     """
-    import json
-    import os
-    import tempfile
-    import numpy as np
-    from datasets import load_dataset
-    from transformers import (
-        AutoTokenizer,
-        AutoModelForTokenClassification,
-        TrainingArguments,
-        Trainer,
-        DataCollatorForTokenClassification,
-    )
-    from seqeval.metrics import f1_score, precision_score, recall_score
-    
-    print(f"[TuneKit] Starting NER training for job {job_id}")
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-        f.write(data_content)
-        data_path = f.name
-    
-    try:
-        label_list = config["label_list"]
-        label2id = {label: i for i, label in enumerate(label_list)}
-        id2label = {i: label for label, i in label2id.items()}
-        
-        tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-        model = AutoModelForTokenClassification.from_pretrained(
-            config["base_model"],
-            num_labels=len(label_list),
-            id2label=id2label,
-            label2id=label2id,
-        )
-        
-        dataset = load_dataset("csv", data_files=data_path, split="train")
-        dataset = dataset.train_test_split(test_size=0.2, seed=42)
-        
-        def tokenize_and_align_labels(examples):
-            tokenized_inputs = tokenizer(
-                examples[config["text_column"]],
-                truncation=True,
-                is_split_into_words=True,
-                max_length=config["max_length"],
-            )
-            
-            labels = []
-            for i, label in enumerate(examples[config["label_column"]]):
-                word_ids = tokenized_inputs.word_ids(batch_index=i)
-                label_ids = []
-                previous_word_idx = None
-                for word_idx in word_ids:
-                    if word_idx is None:
-                        label_ids.append(-100)
-                    elif word_idx != previous_word_idx:
-                        label_ids.append(label2id[label[word_idx]])
-                    else:
-                        label_ids.append(-100)
-                    previous_word_idx = word_idx
-                labels.append(label_ids)
-            
-            tokenized_inputs["labels"] = labels
-            return tokenized_inputs
-        
-        tokenized = dataset.map(tokenize_and_align_labels, batched=True)
-        
-        def compute_metrics(eval_pred):
-            predictions, labels = eval_pred
-            predictions = np.argmax(predictions, axis=2)
-            
-            true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
-            true_predictions = [
-                [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
-                for prediction, label in zip(predictions, labels)
-            ]
-            
-            return {
-                "precision": precision_score(true_labels, true_predictions),
-                "recall": recall_score(true_labels, true_predictions),
-                "f1": f1_score(true_labels, true_predictions),
-            }
-        
-        output_dir = f"{MODEL_DIR}/{job_id}"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            learning_rate=config["learning_rate"],
-            per_device_train_batch_size=config["batch_size"],
-            per_device_eval_batch_size=config["batch_size"],
-            num_train_epochs=config["num_epochs"],
-            warmup_ratio=config.get("warmup_ratio", 0.1),
-            weight_decay=config.get("weight_decay", 0.01),
-            eval_strategy="epoch",
-            save_strategy="epoch",
-            load_best_model_at_end=True,
-            metric_for_best_model="f1",
-            logging_steps=10,
-            report_to="none",
-        )
-        
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized["train"],
-            eval_dataset=tokenized["test"],
-            tokenizer=tokenizer,
-            data_collator=DataCollatorForTokenClassification(tokenizer=tokenizer),
-            compute_metrics=compute_metrics,
-        )
-        
-        print("[TuneKit] Training started...")
-        trainer.train()
-        
-        trainer.save_model(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        
-        with open(f"{output_dir}/tunekit_config.json", "w") as f:
-            json.dump(config, f, indent=2)
-        
-        model_volume.commit()
-        
-        results = trainer.evaluate()
-        print(f"[TuneKit] Training complete! Results: {results}")
-        
-        return {
-            "status": "completed",
-            "job_id": job_id,
-            "metrics": results,
-            "model_path": output_dir,
-        }
-        
-    except Exception as e:
-        print(f"[TuneKit] Training failed: {str(e)}")
-        return {
-            "status": "failed",
-            "job_id": job_id,
-            "error": str(e),
-        }
-    finally:
-        os.unlink(data_path)
+    print(f"[TuneKit] WARNING: train_ner is deprecated. Use train_chat_lora instead.")
+    return {"status": "failed", "error": "NER training deprecated. Use chat-based fine-tuning."}
 
-
-# =============================================================================
-# INSTRUCTION TUNING (QLoRA)
-# =============================================================================
 
 @app.function(
     image=training_image,
-    gpu="A10G",  # Need more VRAM for LLMs
-    timeout=7200,  # 2 hours for LLM training
+    gpu="A10G",
+    timeout=7200,
     volumes={MODEL_DIR: model_volume},
 )
 def train_instruction(config: dict, data_content: str, job_id: str) -> dict:
     """
-    Train an instruction-following model using QLoRA on Modal GPU.
+    DEPRECATED: Use train_chat_lora instead.
     """
-    import json
-    import os
-    import tempfile
-    import torch
-    from datasets import load_dataset
-    from transformers import (
-        AutoTokenizer,
-        AutoModelForCausalLM,
-        BitsAndBytesConfig,
-        TrainingArguments,
-    )
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from trl import SFTTrainer
+    print(f"[TuneKit] WARNING: train_instruction is deprecated. Use train_chat_lora instead.")
     
-    print(f"[TuneKit] Starting instruction tuning for job {job_id}")
-    print(f"[TuneKit] Model: {config['base_model']}")
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-        f.write(data_content)
-        data_path = f.name
-    
-    try:
-        # QLoRA quantization config
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-        )
-        
-        # Load model with quantization
-        model = AutoModelForCausalLM.from_pretrained(
-            config["base_model"],
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        model = prepare_model_for_kbit_training(model)
-        
-        # LoRA config
-        lora_config = LoraConfig(
-            r=config.get("lora_r", 8),
-            lora_alpha=config.get("lora_alpha", 16),
-            lora_dropout=config.get("lora_dropout", 0.1),
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-        )
-        model = get_peft_model(model, lora_config)
-        model.print_trainable_parameters()
-        
-        # Tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "right"
-        
-        # Load dataset
-        dataset = load_dataset("csv", data_files=data_path, split="train")
-        
-        # Format as chat
-        def format_instruction(example):
-            instruction = example[config["instruction_column"]]
-            response = example[config["response_column"]]
-            return {"text": f"### Instruction:\n{instruction}\n\n### Response:\n{response}"}
-        
-        dataset = dataset.map(format_instruction)
-        dataset = dataset.train_test_split(test_size=0.1, seed=42)
-        
-        output_dir = f"{MODEL_DIR}/{job_id}"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            learning_rate=config["learning_rate"],
-            per_device_train_batch_size=config["batch_size"],
-            per_device_eval_batch_size=config["batch_size"],
-            num_train_epochs=config["num_epochs"],
-            warmup_ratio=config.get("warmup_ratio", 0.1),
-            weight_decay=config.get("weight_decay", 0.01),
-            eval_strategy="epoch",
-            save_strategy="epoch",
-            gradient_accumulation_steps=config.get("gradient_accumulation_steps", 4),
-            fp16=True,
-            logging_steps=10,
-            report_to="none",
-        )
-        
-        trainer = SFTTrainer(
-            model=model,
-            args=training_args,
-            train_dataset=dataset["train"],
-            eval_dataset=dataset["test"],
-            tokenizer=tokenizer,
-            dataset_text_field="text",
-            max_seq_length=config["max_length"],
-        )
-        
-        print("[TuneKit] Training started...")
-        trainer.train()
-        
-        # Save LoRA adapter
-        trainer.save_model(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        
-        with open(f"{output_dir}/tunekit_config.json", "w") as f:
-            json.dump(config, f, indent=2)
-        
-        model_volume.commit()
-        
-        print(f"[TuneKit] Training complete! Model saved to {output_dir}")
-        
-        return {
-            "status": "completed",
-            "job_id": job_id,
-            "metrics": {"training_loss": trainer.state.log_history[-1].get("loss", 0)},
-            "model_path": output_dir,
+    # Redirect to chat training
+    chat_config = {
+        "base_model": config.get("base_model", "microsoft/Phi-4-mini-instruct"),
+        "max_seq_length": config.get("max_length", 2048),
+        "lora_config": {
+            "r": config.get("lora_r", 16),
+            "lora_alpha": config.get("lora_alpha", 16),
+            "lora_dropout": config.get("lora_dropout", 0),
+        },
+        "training_args": {
+            "num_train_epochs": config.get("num_epochs", 3),
+            "per_device_train_batch_size": config.get("batch_size", 2),
+            "learning_rate": config.get("learning_rate", 2e-4),
+            "gradient_accumulation_steps": config.get("gradient_accumulation_steps", 4),
         }
-        
-    except Exception as e:
-        print(f"[TuneKit] Training failed: {str(e)}")
-        return {
-            "status": "failed",
-            "job_id": job_id,
-            "error": str(e),
-        }
-    finally:
-        os.unlink(data_path)
+    }
+    
+    return train_chat_lora.local(chat_config, data_content, job_id)
 
 
 # =============================================================================
-# MODEL DOWNLOAD HELPER
+# MODEL DOWNLOAD HELPERS
 # =============================================================================
 
 @app.function(
@@ -652,7 +649,7 @@ def download_model_zip(job_id: str) -> bytes:
 
 
 # =============================================================================
-# INFERENCE COMPARISON
+# INFERENCE / TESTING
 # =============================================================================
 
 @app.function(
@@ -661,23 +658,20 @@ def download_model_zip(job_id: str) -> bytes:
     timeout=120,
     volumes={MODEL_DIR: model_volume},
 )
-def compare_inference(job_id: str, text: str, task_type: str = "classification") -> dict:
+def test_model(job_id: str, messages: list) -> dict:
     """
-    Compare base model vs fine-tuned model predictions.
+    Test a fine-tuned model with a conversation.
     
     Args:
         job_id: Job ID of the fine-tuned model
-        text: Input text to classify/process
-        task_type: "classification" or "ner"
+        messages: List of messages [{"role": "user", "content": "..."}]
     
     Returns:
-        dict with base_prediction and finetuned_prediction
+        dict with generated response
     """
     import json
     import os
     import torch
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
-    import torch.nn.functional as F
     
     model_path = f"{MODEL_DIR}/{job_id}"
     config_path = f"{model_path}/tunekit_config.json"
@@ -685,86 +679,94 @@ def compare_inference(job_id: str, text: str, task_type: str = "classification")
     if not os.path.exists(model_path):
         return {"error": f"Model not found: {job_id}"}
     
-    # Load config to get base model name and labels
-    with open(config_path) as f:
-        config = json.load(f)
-    
-    base_model_name = config["base_model"]
-    
-    # Load tokenizer (same for both)
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    
-    # Tokenize input
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-    
-    results = {}
-    
-    # Helper to get label from id2label (handles both int and str keys)
-    def get_label(id2label, idx):
-        if not id2label:
-            return str(idx)
-        # Try int key first, then str key
-        if idx in id2label:
-            return str(id2label[idx])
-        if str(idx) in id2label:
-            return str(id2label[str(idx)])
-        return str(idx)
-    
-    # ============================================
-    # FINE-TUNED MODEL PREDICTION (load first to get id2label)
-    # ============================================
-    print(f"[TuneKit] Loading fine-tuned model: {model_path}")
-    finetuned_model = AutoModelForSequenceClassification.from_pretrained(model_path)
-    finetuned_model.eval()
-    
-    # Get id2label from the fine-tuned model (this has the correct labels)
-    id2label = {}
-    if hasattr(finetuned_model.config, 'id2label') and finetuned_model.config.id2label:
-        id2label = finetuned_model.config.id2label
-    print(f"[TuneKit] Labels: {id2label}")
-    
-    with torch.no_grad():
-        outputs = finetuned_model(**inputs)
-        probs = F.softmax(outputs.logits, dim=-1)
-        pred_idx = torch.argmax(probs, dim=-1).item()
-        confidence = probs[0][pred_idx].item()
-    
-    finetuned_label = get_label(id2label, pred_idx)
-    
-    results["finetuned"] = {
-        "prediction": finetuned_label,
-        "confidence": round(confidence * 100, 2),
-        "model": f"tunekit/{job_id}",
-    }
-    
-    # Free memory
-    del finetuned_model
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
-    
-    # ============================================
-    # BASE MODEL PREDICTION
-    # ============================================
-    print(f"[TuneKit] Loading base model: {base_model_name}")
-    base_model = AutoModelForSequenceClassification.from_pretrained(
-        base_model_name,
-        num_labels=config["num_labels"],
-    )
-    base_model.eval()
-    
-    with torch.no_grad():
-        outputs = base_model(**inputs)
-        probs = F.softmax(outputs.logits, dim=-1)
-        pred_idx = torch.argmax(probs, dim=-1).item()
-        confidence = probs[0][pred_idx].item()
-    
-    # Use the same id2label from fine-tuned model for base model too
-    base_label = get_label(id2label, pred_idx)
-    
-    results["base"] = {
-        "prediction": base_label,
-        "confidence": round(confidence * 100, 2),
-        "model": base_model_name,
-    }
-    
-    return results
+    try:
+        from unsloth import FastLanguageModel
+        from peft import PeftModel
+        
+        # Load config
+        with open(config_path) as f:
+            config = json.load(f)
+        
+        base_model = config["base_model"]
+        max_seq_length = config.get("max_seq_length", 2048)
+        
+        print(f"[TuneKit] Loading base model: {base_model}")
+        
+        # Load base model
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=base_model,
+            max_seq_length=max_seq_length,
+            dtype=None,
+            load_in_4bit=True,
+            trust_remote_code=True,
+        )
+        
+        # Load LoRA adapter
+        print(f"[TuneKit] Loading LoRA adapter from: {model_path}")
+        model = PeftModel.from_pretrained(model, model_path)
+        
+        # Enable inference mode
+        FastLanguageModel.for_inference(model)
+        
+        # Format input
+        if hasattr(tokenizer, 'apply_chat_template'):
+            prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        else:
+            prompt = "\n".join([f"<|{m['role']}|>\n{m['content']}" for m in messages])
+            prompt += "\n<|assistant|>\n"
+        
+        # Generate
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=512,
+                temperature=0.7,
+                top_p=0.9,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        
+        # Decode response
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        # Extract just the assistant's response
+        if "<|assistant|>" in response:
+            response = response.split("<|assistant|>")[-1].strip()
+        elif prompt in response:
+            response = response[len(prompt):].strip()
+        
+        return {
+            "status": "success",
+            "response": response,
+            "model": f"tunekit/{job_id}",
+            "base_model": base_model,
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
 
+
+# =============================================================================
+# MAIN ENTRY POINT (for CLI testing)
+# =============================================================================
+
+@app.local_entrypoint()
+def main():
+    """
+    Test the training function locally.
+    """
+    print("TuneKit Modal Training - Unsloth LoRA")
+    print("=====================================")
+    print("Deploy with: modal deploy tunekit/training/modal_train.py")
+    print("Run training via the TuneKit API at /train endpoint")
