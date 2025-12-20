@@ -65,6 +65,27 @@ sessions: dict[str, dict] = {}
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Persistent package mapping (survives server restarts)
+PACKAGE_MAPPING_FILE = "output/.package_mapping.json"
+
+def save_package_mapping(session_id: str, package_path: str):
+    """Save session_id -> package_path mapping to persistent file."""
+    os.makedirs("output", exist_ok=True)
+    mapping = load_package_mapping()
+    mapping[session_id] = package_path
+    with open(PACKAGE_MAPPING_FILE, "w") as f:
+        json.dump(mapping, f)
+
+def load_package_mapping() -> dict:
+    """Load package mappings from persistent file."""
+    if os.path.exists(PACKAGE_MAPPING_FILE):
+        try:
+            with open(PACKAGE_MAPPING_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
 # Serve static files (frontend)
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
@@ -713,6 +734,9 @@ async def generate(request: GenerateRequest):
     
     package_path = state["package_path"]
     
+    # Save to persistent mapping (survives server restarts)
+    save_package_mapping(session_id, package_path)
+    
     return GenerateResponse(
         session_id=session_id,
         package_path=package_path,
@@ -724,20 +748,27 @@ async def generate(request: GenerateRequest):
 async def download(session_id: str):
     """
     Download the generated training package as a ZIP file.
+    Works even after server restart using persistent mapping.
     """
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    package_path = None
     
-    session = sessions[session_id]
-    state = session.get("state")
+    # Try to get package path from session first
+    if session_id in sessions:
+        session = sessions[session_id]
+        state = session.get("state")
+        if state:
+            package_path = state.get("package_path")
     
-    if not state or not state.get("package_path"):
-        raise HTTPException(status_code=400, detail="Package not generated yet")
+    # Fallback: check persistent mapping (for after server restart)
+    if not package_path:
+        mapping = load_package_mapping()
+        package_path = mapping.get(session_id)
     
-    package_path = state["package_path"]
+    if not package_path:
+        raise HTTPException(status_code=404, detail="Package not found. Please regenerate the package.")
     
     if not os.path.exists(package_path):
-        raise HTTPException(status_code=404, detail="Package folder not found")
+        raise HTTPException(status_code=404, detail="Package folder not found on disk")
     
     # Create ZIP file
     zip_path = f"{package_path}.zip"

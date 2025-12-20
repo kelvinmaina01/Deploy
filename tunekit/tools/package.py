@@ -13,6 +13,7 @@ Unsloth provides:
 
 import json
 import os
+import shutil
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -572,6 +573,7 @@ Export to GGUF for llama.cpp/Ollama, or merged formats for HuggingFace.
 
 | File | Description |
 |------|-------------|
+| `data.jsonl` | Your training dataset (included) |
 | `config.json` | Training configuration |
 | `train.py` | Unsloth LoRA training script |
 | `eval.py` | Evaluation + interactive testing |
@@ -715,8 +717,10 @@ def generate_package(state: "TuneKitState") -> dict:
     """
     config = state["training_config"].copy()
     
-    # Add essential paths
-    config["data_path"] = os.path.abspath(state["file_path"])
+    # Get the original data file path
+    original_data_path = state["file_path"]
+    
+    # Set base model
     config["base_model"] = state.get("base_model", config.get("model_name", "unsloth/Phi-4"))
     
     # Ensure output_dir is set
@@ -764,6 +768,16 @@ def generate_package(state: "TuneKitState") -> dict:
     package_path = os.path.join("output", package_name)
     os.makedirs(package_path, exist_ok=True)
     
+    # Copy data file into the package (makes it self-contained)
+    data_filename = "data.jsonl"
+    data_dest_path = os.path.join(package_path, data_filename)
+    if os.path.exists(original_data_path):
+        shutil.copy2(original_data_path, data_dest_path)
+        config["data_path"] = f"./{data_filename}"  # Relative path for portability
+    else:
+        # Fallback to original path if file doesn't exist
+        config["data_path"] = original_data_path
+    
     # 1. Generate config.json
     config_path = os.path.join(package_path, "config.json")
     with open(config_path, "w") as f:
@@ -799,6 +813,7 @@ def generate_package(state: "TuneKitState") -> dict:
     print(f"{'='*60}")
     print(f"📁 Location: {package_path}/")
     print(f"\n📦 Files created:")
+    print(f"   data.jsonl       → Your training dataset")
     print(f"   config.json      → Training configuration")
     print(f"   train.py         → Unsloth LoRA training script")
     print(f"   eval.py          → Evaluation + interactive mode")

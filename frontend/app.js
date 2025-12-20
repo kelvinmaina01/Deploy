@@ -854,7 +854,7 @@ document.getElementById('backToUpload')?.addEventListener('click', () => {
         });
         
         // Show task question with typewriter
-        setTimeout(() => {
+            setTimeout(() => {
             showQuestion('questionTask');
             
             // Force reset AGAIN after question is visible to ensure it's clean
@@ -865,7 +865,7 @@ document.getElementById('backToUpload')?.addEventListener('click', () => {
                 });
             }, 100);
         }, 200);
-    } else {
+        } else {
         // Go back to step 1 (upload)
         setStep(1);
     }
