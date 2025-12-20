@@ -1,7 +1,14 @@
 """
 Package Generator Tool
 ======================
-Generates a complete, ready-to-run training package with 5 files.
+Generates a complete, ready-to-run training package using Unsloth for
+fast LoRA fine-tuning of chat models.
+
+Unsloth provides:
+- 2-5x faster training
+- 70% less memory usage
+- Native 4-bit quantization
+- Easy model export (GGUF, GGML, etc.)
 """
 
 import json
@@ -14,368 +21,227 @@ if TYPE_CHECKING:
 
 
 # ============================================================================
-# TEMPLATE: train.py for CLASSIFICATION
+# TEMPLATE: train.py using Unsloth
 # ============================================================================
 
-TRAIN_CLASSIFICATION = '''"""
-TuneKit Generated Training Script - Classification
+TRAIN_UNSLOTH = '''"""
+TuneKit Training Script - Unsloth LoRA Fine-Tuning
 ===================================================
 Run: python train.py
-"""
 
-import json
-from datasets import load_dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    TrainingArguments,
-    Trainer,
-    DataCollatorWithPadding,
-)
-from sklearn.metrics import accuracy_score, f1_score
-import numpy as np
-
-# Load config
-with open("config.json") as f:
-    config = json.load(f)
-
-print(f"Task: {config['task_type']}")
-print(f"Model: {config['base_model']}")
-print(f"Data: {config['data_path']}")
-
-# Load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-model = AutoModelForSequenceClassification.from_pretrained(
-    config["base_model"],
-    num_labels=config["num_labels"],
-)
-
-# Load and prepare dataset
-dataset = load_dataset("csv", data_files=config["data_path"], split="train")
-dataset = dataset.train_test_split(test_size=0.2, seed=42)
-
-# Create label mapping
-labels = dataset["train"].unique(config["label_column"])
-label2id = {label: i for i, label in enumerate(labels)}
-id2label = {i: label for label, i in label2id.items()}
-
-model.config.label2id = label2id
-model.config.id2label = id2label
-
-def tokenize_function(examples):
-    tokens = tokenizer(
-        examples[config["text_column"]],
-        padding="max_length",
-        truncation=True,
-        max_length=config["max_length"],
-    )
-    tokens["labels"] = [label2id[label] for label in examples[config["label_column"]]]
-    return tokens
-
-tokenized = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
-
-# Metrics
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
-    return {
-        "accuracy": accuracy_score(labels, predictions),
-        "f1": f1_score(labels, predictions, average="weighted"),
-    }
-
-# Training arguments
-training_args = TrainingArguments(
-    output_dir=config["output_dir"],
-    learning_rate=config["learning_rate"],
-    per_device_train_batch_size=config["batch_size"],
-    per_device_eval_batch_size=config["batch_size"],
-    num_train_epochs=config["num_epochs"],
-    warmup_ratio=config["warmup_ratio"],
-    weight_decay=config["weight_decay"],
-    evaluation_strategy=config["evaluation_strategy"],
-    save_strategy=config["save_strategy"],
-    load_best_model_at_end=True,
-    metric_for_best_model=config["metric_for_best_model"],
-    push_to_hub=False,
-    logging_steps=10,
-    report_to="none",
-)
-
-# Train
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized["train"],
-    eval_dataset=tokenized["test"],
-    tokenizer=tokenizer,
-    data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
-    compute_metrics=compute_metrics,
-)
-
-print("\\nStarting training...")
-trainer.train()
-
-# Save
-trainer.save_model(config["output_dir"])
-tokenizer.save_pretrained(config["output_dir"])
-print(f"\\nModel saved to {config['output_dir']}")
-
-# Final evaluation
-results = trainer.evaluate()
-print(f"\\nFinal Results: {results}")
-'''
-
-
-# ============================================================================
-# TEMPLATE: train.py for NER
-# ============================================================================
-
-TRAIN_NER = '''"""
-TuneKit Generated Training Script - Named Entity Recognition
-=============================================================
-Run: python train.py
-"""
-
-import json
-from datasets import load_dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForTokenClassification,
-    TrainingArguments,
-    Trainer,
-    DataCollatorForTokenClassification,
-)
-from seqeval.metrics import f1_score, precision_score, recall_score
-import numpy as np
-
-# Load config
-with open("config.json") as f:
-    config = json.load(f)
-
-print(f"Task: {config['task_type']}")
-print(f"Model: {config['base_model']}")
-print(f"Data: {config['data_path']}")
-
-# Label list
-label_list = config["label_list"]
-label2id = {label: i for i, label in enumerate(label_list)}
-id2label = {i: label for label, i in label2id.items()}
-
-# Load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-model = AutoModelForTokenClassification.from_pretrained(
-    config["base_model"],
-    num_labels=len(label_list),
-    id2label=id2label,
-    label2id=label2id,
-)
-
-# Load dataset
-dataset = load_dataset("csv", data_files=config["data_path"], split="train")
-dataset = dataset.train_test_split(test_size=0.2, seed=42)
-
-def tokenize_and_align_labels(examples):
-    tokenized_inputs = tokenizer(
-        examples[config["text_column"]],
-        truncation=True,
-        is_split_into_words=True,
-        max_length=config["max_length"],
-    )
-    
-    labels = []
-    for i, label in enumerate(examples[config["label_column"]]):
-        word_ids = tokenized_inputs.word_ids(batch_index=i)
-        label_ids = []
-        previous_word_idx = None
-        for word_idx in word_ids:
-            if word_idx is None:
-                label_ids.append(-100)
-            elif word_idx != previous_word_idx:
-                label_ids.append(label2id[label[word_idx]])
-            else:
-                label_ids.append(-100)
-            previous_word_idx = word_idx
-        labels.append(label_ids)
-    
-    tokenized_inputs["labels"] = labels
-    return tokenized_inputs
-
-tokenized = dataset.map(tokenize_and_align_labels, batched=True)
-
-# Metrics
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred
-    predictions = np.argmax(predictions, axis=2)
-    
-    true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
-    true_predictions = [
-        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    
-    return {
-        "precision": precision_score(true_labels, true_predictions),
-        "recall": recall_score(true_labels, true_predictions),
-        "f1": f1_score(true_labels, true_predictions),
-    }
-
-# Training arguments
-training_args = TrainingArguments(
-    output_dir=config["output_dir"],
-    learning_rate=config["learning_rate"],
-    per_device_train_batch_size=config["batch_size"],
-    per_device_eval_batch_size=config["batch_size"],
-    num_train_epochs=config["num_epochs"],
-    warmup_ratio=config["warmup_ratio"],
-    weight_decay=config["weight_decay"],
-    evaluation_strategy=config["evaluation_strategy"],
-    save_strategy=config["save_strategy"],
-    load_best_model_at_end=True,
-    metric_for_best_model="f1",
-    push_to_hub=False,
-    logging_steps=10,
-    report_to="none",
-)
-
-# Train
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized["train"],
-    eval_dataset=tokenized["test"],
-    tokenizer=tokenizer,
-    data_collator=DataCollatorForTokenClassification(tokenizer=tokenizer),
-    compute_metrics=compute_metrics,
-)
-
-print("\\nStarting training...")
-trainer.train()
-
-# Save
-trainer.save_model(config["output_dir"])
-tokenizer.save_pretrained(config["output_dir"])
-print(f"\\nModel saved to {config['output_dir']}")
-
-# Final evaluation
-results = trainer.evaluate()
-print(f"\\nFinal Results: {results}")
-'''
-
-
-# ============================================================================
-# TEMPLATE: train.py for INSTRUCTION TUNING (QLoRA)
-# ============================================================================
-
-TRAIN_INSTRUCTION = '''"""
-TuneKit Generated Training Script - Instruction Tuning (QLoRA)
-===============================================================
-Run: python train.py
+This script uses Unsloth for 2-5x faster training with 70% less memory.
+Your dataset should be in JSONL format with "messages" structure.
 """
 
 import json
 import torch
+from unsloth import FastLanguageModel
 from datasets import load_dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    BitsAndBytesConfig,
-    TrainingArguments,
-)
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
+from transformers import TrainingArguments
 
-# Load config
+# ============================================================================
+# LOAD CONFIG
+# ============================================================================
+
 with open("config.json") as f:
     config = json.load(f)
 
-print(f"Task: {config['task_type']}")
+print("="*60)
+print("TUNEKIT - UNSLOTH LORA TRAINING")
+print("="*60)
 print(f"Model: {config['base_model']}")
-print(f"Data: {config['data_path']}")
+print(f"Data:  {config['data_path']}")
+print(f"Output: {config['output_dir']}")
+print("="*60)
 
-# QLoRA config
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
+# ============================================================================
+# LOAD MODEL WITH UNSLOTH (4-BIT QUANTIZATION)
+# ============================================================================
+
+print("\\nLoading model with Unsloth...")
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=config["base_model"],
+    max_seq_length=config.get("max_seq_length", 2048),
+    dtype=None,  # Auto-detect
+    load_in_4bit=True,  # 4-bit quantization for memory efficiency
 )
 
-# Load model with quantization
-model = AutoModelForCausalLM.from_pretrained(
-    config["base_model"],
-    quantization_config=bnb_config,
-    device_map="auto",
-    trust_remote_code=True,
-)
-model = prepare_model_for_kbit_training(model)
+# ============================================================================
+# CONFIGURE LORA
+# ============================================================================
 
-# LoRA config
-lora_config = LoraConfig(
-    r=config["lora_r"],
-    lora_alpha=config["lora_alpha"],
-    lora_dropout=config["lora_dropout"],
+lora_config = config.get("lora_config", {})
+
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=lora_config.get("r", 16),
+    lora_alpha=lora_config.get("lora_alpha", 16),
+    lora_dropout=lora_config.get("lora_dropout", 0),
+    target_modules=lora_config.get("target_modules", [
+        "q_proj", "k_proj", "v_proj", "o_proj",
+        "gate_proj", "up_proj", "down_proj",
+    ]),
     bias="none",
-    task_type="CAUSAL_LM",
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    use_gradient_checkpointing="unsloth",  # Unsloth's optimized checkpointing
+    random_state=42,
+    use_rslora=False,  # Rank-stabilized LoRA
+    loftq_config=None,
 )
-model = get_peft_model(model, lora_config)
-model.print_trainable_parameters()
 
-# Tokenizer
-tokenizer = AutoTokenizer.from_pretrained(config["base_model"])
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+print("\\nLoRA Configuration:")
+print(f"  Rank (r): {lora_config.get('r', 16)}")
+print(f"  Alpha: {lora_config.get('lora_alpha', 16)}")
+print(f"  Dropout: {lora_config.get('lora_dropout', 0)}")
 
-# Load dataset
-dataset = load_dataset("csv", data_files=config["data_path"], split="train")
+# ============================================================================
+# LOAD AND PREPARE DATASET
+# ============================================================================
 
-# Format as chat
-def format_instruction(example):
-    instruction = example[config["instruction_column"]]
-    response = example[config["response_column"]]
-    return {"text": f"### Instruction:\\n{instruction}\\n\\n### Response:\\n{response}"}
+print("\\nLoading dataset...")
 
-dataset = dataset.map(format_instruction)
-dataset = dataset.train_test_split(test_size=0.1, seed=42)
+dataset = load_dataset("json", data_files=config["data_path"], split="train")
+print(f"Loaded {len(dataset)} examples")
 
-# Training arguments
+# Verify format
+if len(dataset) == 0:
+    raise ValueError("Dataset is empty!")
+if "messages" not in dataset[0]:
+    raise ValueError('Dataset must have "messages" field.')
+
+# Format using chat template
+def format_chat(example):
+    """Apply chat template to messages."""
+    messages = example["messages"]
+    
+    # Use tokenizer's chat template
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=False
+    )
+    
+    return {"text": text}
+
+print("Formatting with chat template...")
+dataset = dataset.map(format_chat, remove_columns=dataset.column_names)
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+
+training_args_config = config.get("training_args", {})
+
 training_args = TrainingArguments(
     output_dir=config["output_dir"],
-    learning_rate=config["learning_rate"],
-    per_device_train_batch_size=config["batch_size"],
-    per_device_eval_batch_size=config["batch_size"],
-    num_train_epochs=config["num_epochs"],
-    warmup_ratio=config["warmup_ratio"],
-    weight_decay=config["weight_decay"],
-    evaluation_strategy=config["evaluation_strategy"],
-    save_strategy=config["save_strategy"],
-    gradient_accumulation_steps=config["gradient_accumulation_steps"],
-    fp16=True,
-    logging_steps=10,
+    
+    # Training params
+    num_train_epochs=training_args_config.get("num_train_epochs", 3),
+    per_device_train_batch_size=training_args_config.get("per_device_train_batch_size", 2),
+    gradient_accumulation_steps=training_args_config.get("gradient_accumulation_steps", 4),
+    
+    # Optimizer
+    learning_rate=training_args_config.get("learning_rate", 2e-4),
+    weight_decay=training_args_config.get("weight_decay", 0.01),
+    warmup_steps=training_args_config.get("warmup_steps", 5),
+    
+    # Precision
+    fp16=not torch.cuda.is_bf16_supported(),
+    bf16=torch.cuda.is_bf16_supported(),
+    
+    # Logging
+    logging_steps=training_args_config.get("logging_steps", 10),
+    
+    # Saving
+    save_strategy="epoch",
+    save_total_limit=2,
+    
+    # Optimization
+    optim="adamw_8bit",  # 8-bit Adam for memory efficiency
+    lr_scheduler_type="linear",
+    seed=42,
+    
+    # Disable unused features
+    push_to_hub=False,
     report_to="none",
 )
 
-# Train with SFTTrainer
+# ============================================================================
+# TRAIN
+# ============================================================================
+
+print("\\nInitializing trainer...")
+
 trainer = SFTTrainer(
     model=model,
-    args=training_args,
-    train_dataset=dataset["train"],
-    eval_dataset=dataset["test"],
     tokenizer=tokenizer,
+    train_dataset=dataset,
     dataset_text_field="text",
-    max_seq_length=config["max_length"],
+    max_seq_length=config.get("max_seq_length", 2048),
+    dataset_num_proc=2,
+    packing=False,  # Can set to True for short sequences
+    args=training_args,
 )
 
-print("\\nStarting training...")
-trainer.train()
+# Show GPU stats before training
+gpu_stats = torch.cuda.get_device_properties(0)
+start_gpu_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
+max_memory = round(gpu_stats.total_memory / 1024 / 1024 / 1024, 3)
+print(f"\\nGPU: {gpu_stats.name}")
+print(f"Memory: {start_gpu_memory}GB / {max_memory}GB")
+
+print("\\n" + "="*60)
+print("STARTING TRAINING")
+print("="*60 + "\\n")
+
+trainer_stats = trainer.train()
+
+# Show final GPU stats
+used_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
+used_memory_pct = round(used_memory / max_memory * 100, 2)
+print(f"\\nPeak GPU memory: {used_memory}GB ({used_memory_pct}% of {max_memory}GB)")
+
+# ============================================================================
+# SAVE MODEL
+# ============================================================================
+
+print("\\n" + "="*60)
+print("SAVING MODEL")
+print("="*60)
 
 # Save LoRA adapter
-trainer.save_model(config["output_dir"])
-print(f"\\nLoRA adapter saved to {config['output_dir']}")
+lora_path = config["output_dir"]
+model.save_pretrained(lora_path)
+tokenizer.save_pretrained(lora_path)
+print(f"\\n✓ LoRA adapter saved to: {lora_path}")
 
-# Merge and save full model (optional)
-# merged_model = model.merge_and_unload()
-# merged_model.save_pretrained(config["output_dir"] + "_merged")
+# Optional: Save merged model (full weights)
+# print("\\nMerging LoRA with base model...")
+# model.save_pretrained_merged(lora_path + "_merged", tokenizer, save_method="merged_16bit")
+# print(f"✓ Merged model saved to: {lora_path}_merged")
+
+# ============================================================================
+# EXPORT OPTIONS (UNCOMMENT AS NEEDED)
+# ============================================================================
+
+# # Save as GGUF for llama.cpp / Ollama
+# print("\\nExporting to GGUF format...")
+# model.save_pretrained_gguf(lora_path + "_gguf", tokenizer, quantization_method="q4_k_m")
+# print(f"✓ GGUF model saved to: {lora_path}_gguf")
+
+# # Save as 4-bit quantized
+# print("\\nExporting 4-bit quantized model...")
+# model.save_pretrained_merged(lora_path + "_4bit", tokenizer, save_method="merged_4bit_forced")
+# print(f"✓ 4-bit model saved to: {lora_path}_4bit")
+
+print("\\n" + "="*60)
+print("TRAINING COMPLETE!")
+print("="*60)
+print(f"\\nNext steps:")
+print(f"  1. Test: python eval.py")
+print(f"  2. Use LoRA adapter: {lora_path}")
+print("="*60)
 '''
 
 
@@ -384,73 +250,216 @@ print(f"\\nLoRA adapter saved to {config['output_dir']}")
 # ============================================================================
 
 EVAL_SCRIPT = '''"""
-TuneKit Generated Evaluation Script
-====================================
+TuneKit Evaluation Script - Test Your Fine-Tuned Model
+========================================================
 Run: python eval.py
 """
 
 import json
-from transformers import pipeline
+import torch
+from unsloth import FastLanguageModel
 
 # Load config
 with open("config.json") as f:
     config = json.load(f)
 
-print(f"Loading model from {config['output_dir']}...")
+print("="*60)
+print("TUNEKIT - MODEL EVALUATION")
+print("="*60)
+print(f"Loading LoRA adapter from: {config['output_dir']}")
+print("="*60)
 
-# Create pipeline based on task
-if config["task_type"] == "classification":
-    pipe = pipeline("text-classification", model=config["output_dir"])
-    
-    # Test examples
-    test_texts = [
-        "This is amazing! I love it!",
-        "Terrible product, waste of money.",
-        "It's okay, nothing special.",
-    ]
-    
-    print("\\nTest Predictions:")
-    for text in test_texts:
-        result = pipe(text)
-        print(f"  '{text[:50]}...' -> {result[0]['label']} ({result[0]['score']:.2%})")
+# Load model with LoRA adapter
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=config["output_dir"],  # LoRA adapter path
+    max_seq_length=config.get("max_seq_length", 2048),
+    dtype=None,
+    load_in_4bit=True,
+)
 
-elif config["task_type"] == "ner":
-    pipe = pipeline("ner", model=config["output_dir"], aggregation_strategy="simple")
-    
-    test_texts = [
-        "John Smith works at Google in New York.",
-        "Apple CEO Tim Cook announced the new iPhone.",
-    ]
-    
-    print("\\nTest Predictions:")
-    for text in test_texts:
-        result = pipe(text)
-        print(f"  '{text}'")
-        for entity in result:
-            print(f"    -> {entity['word']}: {entity['entity_group']}")
+# Enable faster inference
+FastLanguageModel.for_inference(model)
 
-elif config["task_type"] == "instruction_tuning":
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-    
-    tokenizer = AutoTokenizer.from_pretrained(config["output_dir"])
-    model = AutoModelForCausalLM.from_pretrained(config["output_dir"])
-    
-    test_prompts = [
-        "What is machine learning?",
-        "Explain gradient descent in simple terms.",
-    ]
-    
-    print("\\nTest Generations:")
-    for prompt in test_prompts:
-        formatted = f"### Instruction:\\n{prompt}\\n\\n### Response:\\n"
-        inputs = tokenizer(formatted, return_tensors="pt")
-        outputs = model.generate(**inputs, max_new_tokens=100, temperature=0.7)
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print(f"  Q: {prompt}")
-        print(f"  A: {response.split('### Response:')[-1].strip()[:200]}...")
-        print()
+print("\\nModel loaded successfully!\\n")
 
-print("\\nEvaluation complete!")
+# ============================================================================
+# TEST CONVERSATIONS
+# ============================================================================
+
+test_conversations = [
+    [
+        {"role": "user", "content": "Hello! Can you introduce yourself?"}
+    ],
+    [
+        {"role": "user", "content": "What is machine learning?"}
+    ],
+    [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain the benefits of fine-tuning in one paragraph."}
+    ],
+]
+
+print("="*60)
+print("TESTING MODEL")
+print("="*60)
+
+for i, messages in enumerate(test_conversations, 1):
+    print(f"\\n--- Test {i} ---")
+    print(f"Input: {messages[-1]['content'][:100]}...")
+    
+    # Apply chat template with generation prompt
+    formatted = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    
+    # Tokenize
+    inputs = tokenizer(formatted, return_tensors="pt").to("cuda")
+    
+    # Generate
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=200,
+        use_cache=True,
+        temperature=0.7,
+        top_p=0.9,
+    )
+    
+    # Decode only the new tokens
+    response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    
+    print(f"\\nResponse:\\n{response.strip()}")
+    print("-"*60)
+
+# ============================================================================
+# INTERACTIVE MODE
+# ============================================================================
+
+print("\\n" + "="*60)
+print("INTERACTIVE MODE")
+print("="*60)
+print("Enter messages to chat with your model (type 'quit' to exit)")
+print("="*60)
+
+while True:
+    user_input = input("\\nYou: ").strip()
+    if user_input.lower() in ['quit', 'exit', 'q']:
+        print("Goodbye!")
+        break
+    
+    if not user_input:
+        continue
+    
+    messages = [{"role": "user", "content": user_input}]
+    formatted = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    
+    inputs = tokenizer(formatted, return_tensors="pt").to("cuda")
+    outputs = model.generate(
+        **inputs, max_new_tokens=300, use_cache=True, temperature=0.7
+    )
+    response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    
+    print(f"\\nAssistant: {response.strip()}")
+'''
+
+
+# ============================================================================
+# TEMPLATE: export.py - Export to various formats
+# ============================================================================
+
+EXPORT_SCRIPT = '''"""
+TuneKit Export Script - Export Model to Various Formats
+=========================================================
+Run: python export.py
+
+Export your fine-tuned model to:
+- GGUF (for llama.cpp, Ollama, LM Studio)
+- 16-bit merged (for HuggingFace)
+- 4-bit quantized (for low-memory inference)
+"""
+
+import json
+import os
+from unsloth import FastLanguageModel
+
+# Load config
+with open("config.json") as f:
+    config = json.load(f)
+
+print("="*60)
+print("TUNEKIT - MODEL EXPORT")
+print("="*60)
+
+# Load the trained LoRA model
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=config["output_dir"],
+    max_seq_length=config.get("max_seq_length", 2048),
+    dtype=None,
+    load_in_4bit=True,
+)
+
+base_output = config["output_dir"]
+
+# ============================================================================
+# EXPORT OPTIONS
+# ============================================================================
+
+print("\\nSelect export format:")
+print("  1. GGUF (q4_k_m) - Best for llama.cpp, Ollama, LM Studio")
+print("  2. GGUF (q8_0)   - Higher quality, larger file")
+print("  3. 16-bit merged - Full precision, HuggingFace compatible")
+print("  4. 4-bit merged  - Quantized, memory efficient")
+print("  5. All formats")
+print("  0. Exit")
+
+choice = input("\\nEnter choice (0-5): ").strip()
+
+if choice == "0":
+    print("Exiting.")
+    exit()
+
+# GGUF q4_k_m
+if choice in ["1", "5"]:
+    print("\\nExporting GGUF (q4_k_m)...")
+    output_path = base_output + "_gguf_q4"
+    os.makedirs(output_path, exist_ok=True)
+    model.save_pretrained_gguf(output_path, tokenizer, quantization_method="q4_k_m")
+    print(f"✓ Saved to: {output_path}")
+
+# GGUF q8_0
+if choice in ["2", "5"]:
+    print("\\nExporting GGUF (q8_0)...")
+    output_path = base_output + "_gguf_q8"
+    os.makedirs(output_path, exist_ok=True)
+    model.save_pretrained_gguf(output_path, tokenizer, quantization_method="q8_0")
+    print(f"✓ Saved to: {output_path}")
+
+# 16-bit merged
+if choice in ["3", "5"]:
+    print("\\nExporting 16-bit merged model...")
+    output_path = base_output + "_merged_16bit"
+    os.makedirs(output_path, exist_ok=True)
+    model.save_pretrained_merged(output_path, tokenizer, save_method="merged_16bit")
+    print(f"✓ Saved to: {output_path}")
+
+# 4-bit merged
+if choice in ["4", "5"]:
+    print("\\nExporting 4-bit merged model...")
+    output_path = base_output + "_merged_4bit"
+    os.makedirs(output_path, exist_ok=True)
+    model.save_pretrained_merged(output_path, tokenizer, save_method="merged_4bit_forced")
+    print(f"✓ Saved to: {output_path}")
+
+print("\\n" + "="*60)
+print("EXPORT COMPLETE!")
+print("="*60)
+print("\\nUsage instructions:")
+print("  - GGUF: Use with llama.cpp, Ollama, or LM Studio")
+print("  - Merged: Use with HuggingFace transformers")
+print("="*60)
 '''
 
 
@@ -458,27 +467,27 @@ print("\\nEvaluation complete!")
 # TEMPLATE: requirements.txt
 # ============================================================================
 
-def _generate_requirements(task_type: str) -> str:
-    """Generate requirements.txt based on task type."""
-    base = [
-        "torch>=2.0.0",
-        "transformers>=4.36.0",
-        "datasets>=2.14.0",
-        "accelerate>=0.24.0",
-        "scikit-learn>=1.3.0",
-    ]
-    
-    if task_type == "ner":
-        base.append("seqeval>=1.2.2")
-    
-    if task_type == "instruction_tuning":
-        base.extend([
-            "peft>=0.7.0",
-            "trl>=0.7.0",
-            "bitsandbytes>=0.41.0",
-        ])
-    
-    return "\n".join(base)
+def _generate_requirements() -> str:
+    """Generate requirements.txt for Unsloth training."""
+    return """# TuneKit Training Requirements
+# ================================
+# Install with: pip install -r requirements.txt
+
+# Unsloth - Fast LoRA training (2-5x faster, 70% less memory)
+unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+
+# Core dependencies
+torch>=2.1.0
+transformers>=4.36.0
+datasets>=2.14.0
+accelerate>=0.24.0
+peft>=0.7.0
+trl>=0.7.0
+bitsandbytes>=0.41.0
+
+# Optional: For GGUF export
+# llama-cpp-python>=0.2.0
+"""
 
 
 # ============================================================================
@@ -486,77 +495,188 @@ def _generate_requirements(task_type: str) -> str:
 # ============================================================================
 
 def _generate_readme(state: "TuneKitState") -> str:
-    """Generate README with instructions and context."""
+    """Generate comprehensive README."""
     config = state.get("training_config", {})
-    task_type = state.get("final_task_type", "unknown")
     model = state.get("base_model", "unknown")
     reasoning = state.get("planning_reasoning", "")
+    lora_config = config.get("lora_config", {})
+    training_args = config.get("training_args", {})
     
     readme = f'''# TuneKit Training Package
 
 ## Overview
-This training package was automatically generated by **TuneKit** based on your dataset and requirements.
 
-- **Task Type:** {task_type}
-- **Base Model:** {model}
-- **Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M")}
+This training package was generated by **TuneKit** using **Unsloth** for fast, memory-efficient LoRA fine-tuning.
+
+| Property | Value |
+|----------|-------|
+| Base Model | `{model}` |
+| Training Method | LoRA with Unsloth (2-5x faster) |
+| Data Format | JSONL with "messages" structure |
+| Memory Usage | ~70% less than standard training |
+| Generated | {datetime.now().strftime("%Y-%m-%d %H:%M")} |
+
+## Why Unsloth?
+
+Unsloth provides significant advantages:
+- ⚡ **2-5x faster training** with optimized kernels
+- 💾 **70% less memory** usage
+- 🔧 **Native 4-bit quantization** for efficiency
+- 📦 **Easy export** to GGUF, 16-bit, 4-bit formats
+- 🎯 **Optimized gradient checkpointing**
 
 ## Agent's Reasoning
+
 > {reasoning}
 
 ## Quick Start
 
 ### 1. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run Training
+### 2. Prepare Your Dataset
+
+Your JSONL file should have this format:
+```json
+{{"messages": [{{"role": "user", "content": "..."}}, {{"role": "assistant", "content": "..."}}]}}
+{{"messages": [{{"role": "system", "content": "..."}}, {{"role": "user", "content": "..."}}, {{"role": "assistant", "content": "..."}}]}}
+```
+
+### 3. Train
+
 ```bash
 python train.py
 ```
 
-### 3. Evaluate Model
+### 4. Evaluate
+
 ```bash
 python eval.py
 ```
+
+### 5. Export (Optional)
+
+```bash
+python export.py
+```
+
+Export to GGUF for llama.cpp/Ollama, or merged formats for HuggingFace.
 
 ## Files Included
 
 | File | Description |
 |------|-------------|
-| `config.json` | Training configuration (hyperparameters, columns, etc.) |
-| `train.py` | Complete training script |
-| `eval.py` | Evaluation and inference script |
+| `config.json` | Training configuration |
+| `train.py` | Unsloth LoRA training script |
+| `eval.py` | Evaluation + interactive testing |
+| `export.py` | Export to GGUF, 16-bit, 4-bit |
 | `requirements.txt` | Python dependencies |
 | `README.md` | This file |
 
-## Configuration
+## LoRA Configuration
 
 ```json
-{json.dumps(config, indent=2)}
+{{
+  "r": {lora_config.get("r", 16)},
+  "lora_alpha": {lora_config.get("lora_alpha", 16)},
+  "lora_dropout": {lora_config.get("lora_dropout", 0)},
+  "target_modules": {json.dumps(lora_config.get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]))}
+}}
 ```
 
-## Training Details
+**What these mean:**
+- **r (rank)**: Lower = smaller adapter, faster training. 16 is a good default.
+- **lora_alpha**: Scaling factor. Usually equals r.
+- **target_modules**: Which layers to train. More modules = better quality, more memory.
 
-- **Learning Rate:** {config.get("learning_rate", "N/A")}
-- **Batch Size:** {config.get("batch_size", "N/A")}
-- **Epochs:** {config.get("num_epochs", "N/A")}
-- **Max Length:** {config.get("max_length", "N/A")}
-'''
-    
-    if task_type == "instruction_tuning":
-        readme += f'''
-## QLoRA Settings
-- **LoRA Rank (r):** {config.get("lora_r", 8)}
-- **LoRA Alpha:** {config.get("lora_alpha", 16)}
-- **LoRA Dropout:** {config.get("lora_dropout", 0.1)}
-'''
-    
-    readme += '''
-## Need Help?
-- Check the [HuggingFace Transformers docs](https://huggingface.co/docs/transformers)
-- For QLoRA issues, see [PEFT documentation](https://huggingface.co/docs/peft)
+## Training Configuration
+
+| Setting | Value |
+|---------|-------|
+| Learning Rate | {training_args.get("learning_rate", 2e-4)} |
+| Batch Size | {training_args.get("per_device_train_batch_size", 2)} |
+| Gradient Accumulation | {training_args.get("gradient_accumulation_steps", 4)} |
+| Epochs | {training_args.get("num_train_epochs", 3)} |
+| Max Sequence Length | {config.get("max_seq_length", 2048)} |
+| Precision | Auto (bf16 if supported, else fp16) |
+| Optimizer | AdamW 8-bit |
+
+## Using Your Fine-Tuned Model
+
+### Option 1: With Unsloth (Recommended)
+
+```python
+from unsloth import FastLanguageModel
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="{config.get("output_dir", "./output")}",
+    max_seq_length=2048,
+    load_in_4bit=True,
+)
+FastLanguageModel.for_inference(model)
+
+messages = [{{"role": "user", "content": "Hello!"}}]
+formatted = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tokenizer(formatted, return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=200)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+### Option 2: With HuggingFace (after merging)
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("{config.get("output_dir", "./output")}_merged_16bit")
+model = AutoModelForCausalLM.from_pretrained("{config.get("output_dir", "./output")}_merged_16bit")
+```
+
+### Option 3: With Ollama (after GGUF export)
+
+```bash
+ollama create my-model -f Modelfile
+ollama run my-model
+```
+
+## Export Formats
+
+| Format | Use Case | Size |
+|--------|----------|------|
+| LoRA Adapter | Load with base model | ~50MB |
+| GGUF q4_k_m | llama.cpp, Ollama, LM Studio | ~2-4GB |
+| GGUF q8_0 | Higher quality GGUF | ~4-8GB |
+| 16-bit Merged | HuggingFace, full precision | ~6-14GB |
+| 4-bit Merged | Low-memory inference | ~2-4GB |
+
+## Troubleshooting
+
+### Out of Memory
+
+- Reduce `per_device_train_batch_size` to 1
+- Increase `gradient_accumulation_steps` to 8
+- Reduce `max_seq_length` to 1024
+- Use a smaller model
+
+### Slow Training
+
+- Ensure you're using a GPU
+- Check that Unsloth is properly installed
+- Use `load_in_4bit=True` (default)
+
+### Chat Template Issues
+
+Different models use different templates. If output looks wrong:
+- Check the model's HuggingFace page for the correct template
+- Some models need `add_generation_prompt=True`
+
+## Resources
+
+- [Unsloth GitHub](https://github.com/unslothai/unsloth)
+- [HuggingFace PEFT](https://huggingface.co/docs/peft)
+- [TRL Library](https://huggingface.co/docs/trl)
 
 ---
 *Generated by TuneKit - Automated Fine-Tuning Pipeline*
@@ -571,34 +691,63 @@ python eval.py
 
 def generate_package(state: "TuneKitState") -> dict:
     """
-    Generate a complete training package with 5 files.
+    Generate a complete training package using Unsloth for LoRA fine-tuning.
     
     Inputs (from state):
-        - final_task_type: str
         - base_model: str
         - training_config: dict
         - planning_reasoning: str
-        - file_path: str (original data path)
-    
-    Outputs (to state):
-        - package_path: str (path to generated package folder)
+        - file_path: str (path to JSONL file)
     
     Generated files:
         - config.json
         - train.py
         - eval.py
+        - export.py
         - requirements.txt
         - README.md
+    
+    Returns:
+        - package_path: str (path to generated package folder)
     """
-    task_type = state["final_task_type"]
     config = state["training_config"].copy()
     
-    # Add data path to config
+    # Add essential paths
     config["data_path"] = os.path.abspath(state["file_path"])
+    config["base_model"] = state.get("base_model", config.get("model_name", "unsloth/Phi-4"))
+    
+    # Ensure output_dir is set
+    if "output_dir" not in config:
+        config["output_dir"] = "./lora_adapter"
+    
+    # Set good defaults for Unsloth
+    if "max_seq_length" not in config:
+        config["max_seq_length"] = 2048
+    
+    # Ensure lora_config exists with good defaults
+    if "lora_config" not in config:
+        config["lora_config"] = {
+            "r": 16,
+            "lora_alpha": 16,
+            "lora_dropout": 0,
+            "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        }
+    
+    # Ensure training_args exists with good defaults
+    if "training_args" not in config:
+        config["training_args"] = {
+            "num_train_epochs": 3,
+            "per_device_train_batch_size": 2,
+            "gradient_accumulation_steps": 4,
+            "learning_rate": 2e-4,
+            "warmup_steps": 5,
+            "weight_decay": 0.01,
+            "logging_steps": 10,
+        }
     
     # Create output folder
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    package_name = f"{task_type}_package_{timestamp}"
+    package_name = f"tunekit_lora_{timestamp}"
     package_path = os.path.join("output", package_name)
     os.makedirs(package_path, exist_ok=True)
     
@@ -607,52 +756,48 @@ def generate_package(state: "TuneKitState") -> dict:
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
     
-    # 2. Generate train.py (task-specific)
-    if task_type == "classification":
-        train_script = TRAIN_CLASSIFICATION
-    elif task_type == "ner":
-        train_script = TRAIN_NER
-    elif task_type == "instruction_tuning":
-        train_script = TRAIN_INSTRUCTION
-    else:
-        raise ValueError(f"Unknown task type: {task_type}")
-    
+    # 2. Generate train.py
     train_path = os.path.join(package_path, "train.py")
     with open(train_path, "w") as f:
-        f.write(train_script)
+        f.write(TRAIN_UNSLOTH)
     
     # 3. Generate eval.py
     eval_path = os.path.join(package_path, "eval.py")
     with open(eval_path, "w") as f:
         f.write(EVAL_SCRIPT)
     
-    # 4. Generate requirements.txt
+    # 4. Generate export.py
+    export_path = os.path.join(package_path, "export.py")
+    with open(export_path, "w") as f:
+        f.write(EXPORT_SCRIPT)
+    
+    # 5. Generate requirements.txt
     req_path = os.path.join(package_path, "requirements.txt")
     with open(req_path, "w") as f:
-        f.write(_generate_requirements(task_type))
+        f.write(_generate_requirements())
     
-    # 5. Generate README.md
+    # 6. Generate README.md
     readme_path = os.path.join(package_path, "README.md")
     with open(readme_path, "w") as f:
         f.write(_generate_readme(state))
     
     print(f"\n{'='*60}")
-    print("TRAINING PACKAGE GENERATED")
+    print("🚀 TUNEKIT TRAINING PACKAGE GENERATED")
     print(f"{'='*60}")
-    print(f"Location: {package_path}/")
-    print(f"\nFiles created:")
-    print(f"  - config.json      (training configuration)")
-    print(f"  - train.py         ({task_type} training script)")
-    print(f"  - eval.py          (evaluation script)")
-    print(f"  - requirements.txt (dependencies)")
-    print(f"  - README.md        (instructions)")
-    print(f"\nTo train locally:")
-    print(f"  cd {package_path}")
-    print(f"  pip install -r requirements.txt")
-    print(f"  python train.py")
+    print(f"📁 Location: {package_path}/")
+    print(f"\n📦 Files created:")
+    print(f"   config.json      → Training configuration")
+    print(f"   train.py         → Unsloth LoRA training script")
+    print(f"   eval.py          → Evaluation + interactive mode")
+    print(f"   export.py        → Export to GGUF, 16-bit, 4-bit")
+    print(f"   requirements.txt → Python dependencies")
+    print(f"   README.md        → Documentation")
+    print(f"\n🏃 To train:")
+    print(f"   cd {package_path}")
+    print(f"   pip install -r requirements.txt")
+    print(f"   python train.py")
     print(f"{'='*60}")
     
     return {
         "package_path": package_path,
     }
-
