@@ -42,7 +42,7 @@ from tunekit.training import (
 
 app = FastAPI(
     title="TuneKit API",
-    description="Automated LLM Fine-Tuning Pipeline",
+    description="Automated SLM Fine-Tuning Pipeline",
     version="0.1.0",
 )
 
@@ -676,6 +676,7 @@ async def plan(request: PlanRequest):
     state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {selected_model_name}."
     
     # Create training config for chat-based fine-tuning with LoRA
+    # Note: lora_config is set in package.py with model-specific target_modules
     state["training_config"] = {
         "model_name": model_id,
         "task_type": "chat",
@@ -689,12 +690,9 @@ async def plan(request: PlanRequest):
             "save_strategy": "epoch",
             "warmup_ratio": 0.1,
         },
-        "lora_config": {
-            "r": 16,
-            "lora_alpha": 32,
-            "lora_dropout": 0.05,
-            "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
-        },
+        # lora_config is generated in package.py based on model architecture:
+        # - Phi models: q_proj, k_proj, v_proj, o_proj, fc1, fc2
+        # - Llama/Mistral/Gemma/Qwen: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
     }
     
     # Save updated state
