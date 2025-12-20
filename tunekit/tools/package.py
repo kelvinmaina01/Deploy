@@ -729,11 +729,21 @@ def generate_package(state: "TuneKitState") -> dict:
     
     # Ensure lora_config exists with good defaults
     if "lora_config" not in config:
+        # Detect model architecture for correct target_modules
+        model_id = config.get("base_model", "").lower()
+
+        if "phi" in model_id:
+            # Phi models use fc1/fc2 for MLP layers
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "fc1", "fc2"]
+        else:
+            # Llama, Mistral, Gemma, Qwen use gate_proj/up_proj/down_proj
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
         config["lora_config"] = {
             "r": 16,
             "lora_alpha": 16,
             "lora_dropout": 0,
-            "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+            "target_modules": target_modules
         }
     
     # Ensure training_args exists with good defaults
