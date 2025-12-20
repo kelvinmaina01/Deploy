@@ -485,6 +485,9 @@ peft>=0.7.0
 trl>=0.7.0
 bitsandbytes>=0.41.0
 
+# Required for Unsloth
+xformers<0.0.27
+
 # Optional: For GGUF export
 # llama-cpp-python>=0.2.0
 """
