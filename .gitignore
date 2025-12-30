@@ -7,3 +7,5 @@ test_data/
 output/
 uploads/
 datasets/
+
+generator package test/

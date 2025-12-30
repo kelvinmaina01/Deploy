@@ -180,7 +180,6 @@ trainer = SFTTrainer(
     train_dataset=dataset,
     dataset_text_field="text",
     max_seq_length=config.get("max_seq_length", 2048),
-    dataset_num_proc=2,
     packing=False,  # Can set to True for short sequences
     args=training_args,
 )
@@ -473,24 +472,20 @@ def _generate_requirements() -> str:
     return """# TuneKit Training Requirements
 # ================================
 # Install with: pip install -r requirements.txt
+#
+# For best results, use a virtual environment:
+#   python -m venv venv
+#   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+#   pip install -r requirements.txt
 
 # Unsloth - Fast LoRA training (2-5x faster, 70% less memory)
-unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+# This will install all required dependencies automatically
+unsloth
 
-# Core dependencies
-torch>=2.1.0
-transformers>=4.36.0
-datasets>=2.14.0
-accelerate>=0.24.0
-peft>=0.7.0
-trl>=0.7.0
-bitsandbytes>=0.41.0
-
-# Required for Unsloth
-xformers<0.0.27
-
-# Optional: For GGUF export
-# llama-cpp-python>=0.2.0
+# If you encounter issues, try:
+#   pip uninstall unsloth unsloth_zoo -y
+#   pip install --no-deps git+https://github.com/unslothai/unsloth_zoo.git
+#   pip install --no-deps git+https://github.com/unslothai/unsloth.git
 """
 
 

@@ -1161,10 +1161,11 @@ function displayDatasetSummary(analysis) {
 
 document.getElementById('startTrainingBtn')?.addEventListener('click', () => {
     setStep(4);
-    
-    // Show training options
+
+    // Show training options, hide result views
     document.getElementById('trainingOptions')?.classList.remove('hidden');
     document.getElementById('notebookReady')?.classList.add('hidden');
+    document.getElementById('downloadPackage')?.classList.add('hidden');
 });
 
 document.getElementById('backToRec')?.addEventListener('click', () => {
@@ -1177,17 +1178,17 @@ document.getElementById('backToRec')?.addEventListener('click', () => {
 
 document.getElementById('openColabBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('openColabBtn');
-    
+
     if (!sessionId || !recommendationData) {
         showError('Missing session data. Please start over.');
         return;
     }
-    
+
     // Show loading
     btn.disabled = true;
     btn.querySelector('.btn-text').textContent = 'Generating notebook...';
     btn.querySelector('.btn-loader')?.classList.remove('hidden');
-    
+
     try {
         // First, create the plan (include selected model if user chose an alternative)
         const planBody = {
@@ -1195,29 +1196,29 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
             user_task: selectedTask,
             deployment_target: selectedDeployment
         };
-        
+
         // If user selected an alternative model, include it
         if (selectedModelData && selectedModelData.model_id) {
             planBody.selected_model_id = selectedModelData.model_id;
         }
-        
+
         const planResponse = await fetch(`${API_URL}/plan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(planBody)
         });
-        
+
         if (!planResponse.ok) {
             throw new Error('Failed to create training plan');
         }
-        
+
         // Generate Colab notebook
         const colabResponse = await fetch(`${API_URL}/generate-colab`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId })
         });
-        
+
         if (!colabResponse.ok) {
             let errorMsg = 'Failed to generate notebook';
             try {
@@ -1228,28 +1229,106 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
             }
             throw new Error(errorMsg);
         }
-        
+
         const data = await colabResponse.json();
-        
+
         // Show notebook ready view
         document.getElementById('trainingOptions').classList.add('hidden');
         document.getElementById('notebookReady').classList.remove('hidden');
-        
+
         // Set download link
         const downloadBtn = document.getElementById('downloadNotebookBtn');
         if (downloadBtn) {
             downloadBtn.href = `${API_URL}${data.notebook_url}`;
         }
-        
+
     } catch (error) {
         console.error('Colab generation error:', error);
         showError(error.message);
     } finally {
         btn.disabled = false;
-        btn.querySelector('.btn-text').textContent = 'Open in Google Colab';
+        btn.querySelector('.btn-text').textContent = 'Get Colab Notebook';
         btn.querySelector('.btn-loader')?.classList.add('hidden');
     }
 });
+
+// ============================================================================
+// DOWNLOAD TRAINING PACKAGE
+// ============================================================================
+
+const generateBtn = document.getElementById('generateBtn');
+generateBtn?.addEventListener('click', generatePackage);
+
+async function generatePackage() {
+    if (!sessionId) {
+        showError('No session. Please upload a file first.');
+        return;
+    }
+
+    generateBtn.disabled = true;
+    generateBtn.querySelector('.btn-text').textContent = 'Generating...';
+    generateBtn.querySelector('.btn-loader').classList.remove('hidden');
+
+    try {
+        // Create plan first (include selected model if user chose an alternative)
+        const planBody = {
+            session_id: sessionId,
+            user_task: selectedTask,
+            deployment_target: selectedDeployment
+        };
+
+        // If user selected an alternative model, include it
+        if (selectedModelData && selectedModelData.model_id) {
+            planBody.selected_model_id = selectedModelData.model_id;
+        }
+
+        const planResponse = await fetch(`${API_URL}/plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(planBody)
+        });
+
+        if (!planResponse.ok) {
+            throw new Error('Failed to create training plan');
+        }
+
+        // Generate package
+        const response = await fetch(`${API_URL}/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+
+        if (!response.ok) {
+            let errorMsg = 'Package generation failed';
+            try {
+                const error = await response.json();
+                errorMsg = error.detail || error.message || errorMsg;
+            } catch {
+                errorMsg = await response.text() || errorMsg;
+            }
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+
+        // Show download section
+        document.getElementById('trainingOptions').classList.add('hidden');
+        document.getElementById('downloadPackage').classList.remove('hidden');
+
+        // Setup download link
+        const downloadBtn = document.getElementById('downloadBtn');
+        downloadBtn.href = `${API_URL}${data.download_url}`;
+
+    } catch (error) {
+        console.error('Generate error:', error);
+        showError(error.message);
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.querySelector('.btn-text').textContent = 'Download Package';
+        generateBtn.querySelector('.btn-loader').classList.add('hidden');
+    }
+}
 
 // ============================================================================
 // START OVER
@@ -1266,19 +1345,20 @@ document.getElementById('startOver')?.addEventListener('click', () => {
     selectedModelData = null;
     allModelsData = [];
     originalBestMatch = null;
-    
+
     if (statusPollInterval) {
         clearInterval(statusPollInterval);
         statusPollInterval = null;
     }
-    
+
     // Reset file input
     clearFile();
-    
+
     // Reset step 4 views
     document.getElementById('trainingOptions')?.classList.remove('hidden');
     document.getElementById('notebookReady')?.classList.add('hidden');
-    
+    document.getElementById('downloadPackage')?.classList.add('hidden');
+
     // Go to step 1
     setStep(1);
 });
