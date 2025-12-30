@@ -1,20 +1,15 @@
 """
 TuneKit Training Module
 =======================
-Modal-based cloud training for LLM fine-tuning.
+Colab notebook generation for SLM fine-tuning.
 """
 
-from .modal_service import (
-    start_training,
-    get_training_status,
-    get_model_download_url,
-    compare_models,
+from .colab_generator import (
+    generate_training_notebook,
+    save_notebook,
 )
 
 __all__ = [
-    "start_training",
-    "get_training_status",
-    "get_model_download_url",
-    "compare_models",
+    "generate_training_notebook",
+    "save_notebook",
 ]
-

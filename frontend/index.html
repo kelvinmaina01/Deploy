@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=44">
+    <link rel="stylesheet" href="/static/style.css?v=46">
 </head>
 <body>
     <div class="app-wrapper">
@@ -540,41 +540,69 @@
             <section class="step-content" id="step4">
                 <div class="content-header centered">
                     <div class="header-badge">Step 4</div>
-                    <h1>Start Training</h1>
-                    <p>Choose how you want to train your model</p>
+                    <h1>Train Your Model</h1>
+                    <p>Run training on Google Colab with free GPU</p>
                 </div>
 
-                <!-- Training Options -->
+                <!-- Colab Training Option -->
                 <div id="trainingOptions">
-                    <div class="training-grid">
-                        <div class="card training-option">
-                            <div class="training-icon">☁️</div>
-                            <h3>Train on Cloud</h3>
-                            <p>Run training on Modal's GPU servers. No setup required.</p>
-                            <ul class="training-features">
-                                <li>T4/A10G GPUs available</li>
-                                <li>Pay only for compute time</li>
-                                <li>Download model when done</li>
-                            </ul>
-                            <button class="btn btn-primary btn-full" id="trainCloudBtn">
-                                <span class="btn-text">Train on Cloud</span>
-                                <span class="btn-loader hidden"></span>
-                            </button>
-                    </div>
+                    <div class="colab-card">
+                        <div class="colab-header">
+                            <img src="https://colab.research.google.com/img/colab_favicon_256px.png" alt="Colab" class="colab-logo">
+                            <div class="colab-info">
+                                <h3>Google Colab Notebook</h3>
+                                <p>Train with free T4 GPU • No setup required • ~15 min</p>
+                            </div>
+                        </div>
 
-                        <div class="card training-option">
-                            <div class="training-icon">💻</div>
-                            <h3>Train Locally</h3>
-                            <p>Download scripts and run on your own hardware.</p>
-                            <ul class="training-features">
-                                <li>Full control over training</li>
-                                <li>Use your own GPU</li>
-                                <li>Customize as needed</li>
-                            </ul>
-                            <button class="btn btn-secondary btn-full" id="generateBtn">
-                                <span class="btn-text">Download Package</span>
+                        <div class="colab-features">
+                            <div class="feature-item">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Free T4 GPU (15GB VRAM)</span>
+                            </div>
+                            <div class="feature-item">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Your dataset is embedded in the notebook</span>
+                            </div>
+                            <div class="feature-item">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Just click "Run All" to start training</span>
+                            </div>
+                            <div class="feature-item">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Download your fine-tuned model when done</span>
+                            </div>
+                        </div>
+
+                        <div class="colab-actions">
+                            <button class="btn btn-primary btn-large" id="openColabBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                                <span class="btn-text">Open in Google Colab</span>
                                 <span class="btn-loader hidden"></span>
                             </button>
+                        </div>
+
+                        <div class="colab-steps">
+                            <h4>How it works:</h4>
+                            <ol>
+                                <li>Click the button to download the notebook</li>
+                                <li>Open it in <a href="https://colab.research.google.com" target="_blank">Google Colab</a></li>
+                                <li>Enable GPU: Runtime → Change runtime type → T4 GPU</li>
+                                <li>Click Runtime → Run all</li>
+                                <li>Wait ~15 minutes and download your model!</li>
+                            </ol>
                         </div>
                     </div>
 
@@ -589,31 +617,8 @@
                     </div>
                 </div>
 
-                <!-- Training in Progress -->
-                <div id="trainingProgress" class="hidden">
-                    <div class="card">
-                        <div class="training-status-header">
-                            <div class="status-spinner"></div>
-                            <div class="status-info">
-                                <h3>Training in Progress</h3>
-                                <div class="status-meta">
-                                    <span>Job: <code id="jobIdDisplay">-</code></span>
-                                    <span>Status: <strong id="statusDisplay">Running</strong></span>
-                                </div>
-                        </div>
-                    </div>
-
-                    <div class="training-log">
-                            <div class="log-header">Training Log</div>
-                        <div class="log-output" id="logOutput">
-                            <div class="log-line">Initializing training environment...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Training Complete -->
-                <div id="trainingComplete" class="hidden">
+                <!-- Notebook Ready -->
+                <div id="notebookReady" class="hidden">
                     <div class="card success-card">
                         <div class="success-icon">
                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -621,35 +626,27 @@
                                 <polyline points="22 4 12 14.01 9 11.01"></polyline>
                             </svg>
                         </div>
-                        <h2>Training Complete!</h2>
-                        <p>Your model has been fine-tuned and is ready to use.</p>
-                        <a class="btn btn-primary" id="downloadModelBtn" href="#" download>
-                            Download Model (.zip)
-                        </a>
-                    </div>
-                </div>
-
-                <!-- Download Package -->
-                <div id="downloadPackage" class="hidden">
-                    <div class="card success-card">
-                        <div class="success-icon">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
+                        <h2>Notebook Ready!</h2>
+                        <p>Your training notebook has been generated.</p>
+                        <div class="notebook-actions">
+                            <a class="btn btn-primary" id="downloadNotebookBtn" href="#" download>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Download Notebook
+                            </a>
+                            <a class="btn btn-secondary" href="https://colab.research.google.com" target="_blank">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                                Open Colab
+                            </a>
                         </div>
-                        <h2>Package Ready!</h2>
-                        <p>Your training package has been generated.</p>
-                        <div class="package-contents">
-                            <code>config.json</code>
-                            <code>train.py</code>
-                            <code>requirements.txt</code>
-                            <code>README.md</code>
-                    </div>
-                        <a class="btn btn-primary" id="downloadBtn" href="#">
-                            Download Package (.zip)
-                        </a>
+                        <p class="notebook-hint">Upload the downloaded notebook to Colab to start training</p>
                     </div>
                 </div>
 
@@ -658,6 +655,6 @@
         </main>
     </div>
 
-    <script src="/static/app.js?v=41"></script>
+    <script src="/static/app.js?v=46"></script>
 </body>
 </html>

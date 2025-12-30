@@ -23,8 +23,8 @@ MODELS = {
         'accuracy_baseline': 87
     },
     'gemma-3-2b': {
-        'id': 'google/gemma-3-2b-it',
-        'name': 'Gemma 3 2B',
+        'id': 'google/gemma-2-2b-it',
+        'name': 'Gemma 2 2B',
         'size': '2B',
         'context_window': 8192,  # tokens (8K)
         'training_time_base': 2,  # minutes for 200 examples

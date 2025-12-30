@@ -1163,10 +1163,8 @@ document.getElementById('startTrainingBtn')?.addEventListener('click', () => {
     setStep(4);
     
     // Show training options
-    document.getElementById('trainingOptions').classList.remove('hidden');
-    document.getElementById('trainingProgress').classList.add('hidden');
-    document.getElementById('trainingComplete').classList.add('hidden');
-    document.getElementById('downloadPackage').classList.add('hidden');
+    document.getElementById('trainingOptions')?.classList.remove('hidden');
+    document.getElementById('notebookReady')?.classList.add('hidden');
 });
 
 document.getElementById('backToRec')?.addEventListener('click', () => {
@@ -1174,22 +1172,21 @@ document.getElementById('backToRec')?.addEventListener('click', () => {
 });
 
 // ============================================================================
-// CLOUD TRAINING
+// COLAB NOTEBOOK GENERATION
 // ============================================================================
 
-const trainCloudBtn = document.getElementById('trainCloudBtn');
-trainCloudBtn?.addEventListener('click', startCloudTraining);
-
-async function startCloudTraining() {
+document.getElementById('openColabBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('openColabBtn');
+    
     if (!sessionId || !recommendationData) {
         showError('Missing session data. Please start over.');
         return;
     }
     
     // Show loading
-    trainCloudBtn.disabled = true;
-    trainCloudBtn.querySelector('.btn-text').textContent = 'Starting...';
-    trainCloudBtn.querySelector('.btn-loader').classList.remove('hidden');
+    btn.disabled = true;
+    btn.querySelector('.btn-text').textContent = 'Generating notebook...';
+    btn.querySelector('.btn-loader')?.classList.remove('hidden');
     
     try {
         // First, create the plan (include selected model if user chose an alternative)
@@ -1214,226 +1211,45 @@ async function startCloudTraining() {
             throw new Error('Failed to create training plan');
         }
         
-        // Start training
-        const trainResponse = await fetch(`${API_URL}/train`, {
+        // Generate Colab notebook
+        const colabResponse = await fetch(`${API_URL}/generate-colab`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId })
         });
         
-        if (!trainResponse.ok) {
-            let errorMsg = 'Training failed to start';
+        if (!colabResponse.ok) {
+            let errorMsg = 'Failed to generate notebook';
             try {
-                const error = await trainResponse.json();
+                const error = await colabResponse.json();
                 errorMsg = error.detail || error.message || errorMsg;
             } catch {
-                errorMsg = await trainResponse.text() || errorMsg;
+                errorMsg = await colabResponse.text() || errorMsg;
             }
             throw new Error(errorMsg);
         }
         
-        const data = await trainResponse.json();
-        jobId = data.job_id;
+        const data = await colabResponse.json();
         
-        // Switch to progress view
+        // Show notebook ready view
         document.getElementById('trainingOptions').classList.add('hidden');
-    document.getElementById('trainingProgress').classList.remove('hidden');
-    
-        // Update job info
-        document.getElementById('jobIdDisplay').textContent = jobId;
-    document.getElementById('startTimeDisplay').textContent = new Date().toLocaleTimeString();
-    
-        // Start polling
-        startStatusPolling();
+        document.getElementById('notebookReady').classList.remove('hidden');
+        
+        // Set download link
+        const downloadBtn = document.getElementById('downloadNotebookBtn');
+        if (downloadBtn) {
+            downloadBtn.href = `${API_URL}${data.notebook_url}`;
+        }
         
     } catch (error) {
-        console.error('Training error:', error);
+        console.error('Colab generation error:', error);
         showError(error.message);
     } finally {
-        trainCloudBtn.disabled = false;
-        trainCloudBtn.querySelector('.btn-text').textContent = 'Train on Cloud';
-        trainCloudBtn.querySelector('.btn-loader').classList.add('hidden');
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'Open in Google Colab';
+        btn.querySelector('.btn-loader')?.classList.add('hidden');
     }
-}
-
-function startStatusPolling() {
-    if (statusPollInterval) clearInterval(statusPollInterval);
-    
-    statusPollInterval = setInterval(async () => {
-        try {
-            const response = await fetch(`${API_URL}/train/status/${jobId}`);
-            if (!response.ok) return;
-            
-        const data = await response.json();
-            updateTrainingStatus(data);
-            
-            if (data.status === 'completed' || data.status === 'failed') {
-                clearInterval(statusPollInterval);
-            }
-    } catch (error) {
-            console.error('Status poll error:', error);
-        }
-    }, 3000);
-}
-
-function updateTrainingStatus(data) {
-    const statusDisplay = document.getElementById('statusDisplay');
-    const logOutput = document.getElementById('logOutput');
-    
-    statusDisplay.textContent = data.status;
-    
-    if (data.status === 'completed') {
-    document.getElementById('trainingProgress').classList.add('hidden');
-    document.getElementById('trainingComplete').classList.remove('hidden');
-    
-        // Display metrics if available
-        if (data.base_metrics && data.finetuned_metrics) {
-            displayMetrics(data);
-        }
-        
-        // Setup download
-        if (data.model_url) {
-            document.getElementById('downloadModelBtn').href = data.model_url;
-        }
-    } else if (data.status === 'failed') {
-        statusDisplay.textContent = 'Failed';
-        statusDisplay.style.color = 'var(--error)';
-        
-        const logLine = document.createElement('div');
-        logLine.className = 'log-line log-error';
-        logLine.textContent = data.error || 'Training failed';
-        logOutput.appendChild(logLine);
-    } else {
-        // Add log line
-        if (data.message) {
-            const logLine = document.createElement('div');
-            logLine.className = 'log-line';
-            logLine.textContent = data.message;
-            logOutput.appendChild(logLine);
-            logOutput.scrollTop = logOutput.scrollHeight;
-        }
-    }
-}
-
-function displayMetrics(data) {
-    const baseMetrics = document.getElementById('baseMetrics');
-    const tunedMetrics = document.getElementById('tunedMetrics');
-    
-    baseMetrics.innerHTML = '';
-    tunedMetrics.innerHTML = '';
-    
-    // Display base metrics
-    Object.entries(data.base_metrics || {}).forEach(([key, value]) => {
-        const div = document.createElement('div');
-        div.className = 'card-metric';
-        div.innerHTML = `
-            <span class="card-metric-label">${formatMetricName(key)}</span>
-            <span class="card-metric-value">${formatMetricValue(value)}</span>
-        `;
-        baseMetrics.appendChild(div);
-    });
-    
-    // Display fine-tuned metrics
-    Object.entries(data.finetuned_metrics || {}).forEach(([key, value]) => {
-        const div = document.createElement('div');
-        div.className = 'card-metric';
-        div.innerHTML = `
-            <span class="card-metric-label">${formatMetricName(key)}</span>
-            <span class="card-metric-value">${formatMetricValue(value)}</span>
-        `;
-        tunedMetrics.appendChild(div);
-    });
-    
-    // Set base model name
-    if (data.base_model) {
-        document.getElementById('baseModelName').textContent = data.base_model;
-    }
-}
-
-function formatMetricName(name) {
-    return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-function formatMetricValue(value) {
-    if (typeof value === 'number') {
-        if (value < 1 && value > 0) {
-            return (value * 100).toFixed(1) + '%';
-        }
-        return value.toFixed(2);
-    }
-    return value;
-}
-
-// ============================================================================
-// LOCAL PACKAGE GENERATION
-// ============================================================================
-
-const generateBtn = document.getElementById('generateBtn');
-generateBtn?.addEventListener('click', generatePackage);
-
-async function generatePackage() {
-    if (!sessionId) {
-        showError('No session. Please upload a file first.');
-            return;
-        }
-        
-    generateBtn.disabled = true;
-    generateBtn.querySelector('.btn-text').textContent = 'Generating...';
-    generateBtn.querySelector('.btn-loader').classList.remove('hidden');
-    
-    try {
-        // Create plan first
-        const planResponse = await fetch(`${API_URL}/plan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: sessionId,
-                user_task: selectedTask,
-                deployment_target: selectedDeployment
-            })
-        });
-        
-        if (!planResponse.ok) {
-            throw new Error('Failed to create training plan');
-        }
-        
-        // Generate package
-        const response = await fetch(`${API_URL}/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId })
-        });
-        
-        if (!response.ok) {
-            let errorMsg = 'Package generation failed';
-            try {
-                const error = await response.json();
-                errorMsg = error.detail || error.message || errorMsg;
-            } catch {
-                errorMsg = await response.text() || errorMsg;
-            }
-            throw new Error(errorMsg);
-        }
-        
-        const data = await response.json();
-        
-        // Show download section
-        document.getElementById('trainingOptions').classList.add('hidden');
-        document.getElementById('downloadPackage').classList.remove('hidden');
-        
-        // Setup download link
-        const downloadBtn = document.getElementById('downloadBtn');
-        downloadBtn.href = data.download_url;
-        
-    } catch (error) {
-        console.error('Generate error:', error);
-        showError(error.message);
-    } finally {
-        generateBtn.disabled = false;
-        generateBtn.querySelector('.btn-text').textContent = 'Download Package';
-        generateBtn.querySelector('.btn-loader').classList.add('hidden');
-    }
-}
+});
 
 // ============================================================================
 // START OVER
@@ -1461,15 +1277,7 @@ document.getElementById('startOver')?.addEventListener('click', () => {
     
     // Reset step 4 views
     document.getElementById('trainingOptions')?.classList.remove('hidden');
-    document.getElementById('trainingProgress')?.classList.add('hidden');
-    document.getElementById('trainingComplete')?.classList.add('hidden');
-    document.getElementById('downloadPackage')?.classList.add('hidden');
-    
-    // Clear log
-    const logOutput = document.getElementById('logOutput');
-    if (logOutput) {
-        logOutput.innerHTML = '<div class="log-line">Initializing training environment...</div>';
-    }
+    document.getElementById('notebookReady')?.classList.add('hidden');
     
     // Go to step 1
     setStep(1);

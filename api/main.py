@@ -30,10 +30,8 @@ from tunekit import (
     recommend_model,
 )
 from tunekit.training import (
-    start_training,
-    get_training_status,
-    get_model_download_url,
-    compare_models,
+    generate_training_notebook,
+    save_notebook,
 )
 
 # ============================================================================
@@ -152,45 +150,14 @@ class GenerateResponse(BaseModel):
     download_url: str
 
 
-class TrainRequest(BaseModel):
+class ColabRequest(BaseModel):
     session_id: str
 
 
-class TrainResponse(BaseModel):
+class ColabResponse(BaseModel):
     session_id: str
-    job_id: str
-    status: str
+    notebook_url: str
     message: str
-
-
-class TrainingStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    metrics: Optional[dict] = None
-    base_metrics: Optional[dict] = None
-    finetuned_metrics: Optional[dict] = None
-    improvement: Optional[dict] = None
-    base_model: Optional[str] = None
-    task_type: Optional[str] = None
-    error: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    message: Optional[str] = None
-
-
-class CompareRequest(BaseModel):
-    job_id: str
-    text: str
-
-
-class CompareResponse(BaseModel):
-    base: Optional[dict] = None
-    finetuned: Optional[dict] = None
-    error: Optional[str] = None
-
-
-class ModelDownloadResponse(BaseModel):
-    job_id: str
     status: str
     files: Optional[list] = None
     download_endpoint: Optional[str] = None
@@ -820,15 +787,15 @@ def _get_current_step(state: dict) -> str:
 
 
 # ============================================================================
-# TRAINING ENDPOINTS (Modal)
+# COLAB NOTEBOOK GENERATION
 # ============================================================================
 
-@app.post("/train", response_model=TrainResponse)
-async def train(request: TrainRequest):
+@app.post("/generate-colab", response_model=ColabResponse)
+async def generate_colab_notebook(request: ColabRequest):
     """
-    Start training on Modal cloud GPUs.
+    Generate a Google Colab notebook for training.
     
-    Requires: /plan to be completed first.
+    Requires: /plan to be completed first (to set model and config)
     """
     session_id = request.session_id
     
@@ -838,222 +805,83 @@ async def train(request: TrainRequest):
     session = sessions[session_id]
     state = session.get("state")
     
-    if not state or not state.get("final_task_type"):
+    if not state or not state.get("training_config"):
         raise HTTPException(status_code=400, detail="Run /plan first to configure training")
     
-    # Check if already training
-    if state.get("job_id") and state.get("job_status") == "running":
-        return TrainResponse(
-            session_id=session_id,
-            job_id=state["job_id"],
-            status="already_running",
-            message="Training is already in progress",
-        )
-    
-    # Start training on Modal
-    result = start_training(
-        task_type=state["final_task_type"],
-        config=state["training_config"],
-        data_path=state["file_path"],
-    )
-    
-    if result["status"] == "failed":
-        raise HTTPException(status_code=500, detail=result.get("error", "Training failed to start"))
-    
-    # Update state with job info
-    state["job_id"] = result["job_id"]
-    state["job_status"] = "running"
-    sessions[session_id]["state"] = state
-    
-    return TrainResponse(
-        session_id=session_id,
-        job_id=result["job_id"],
-        status="running",
-        message=result.get("message", "Training started on Modal GPU"),
-    )
-
-
-@app.get("/training-status/{job_id}", response_model=TrainingStatusResponse)
-async def training_status(job_id: str):
-    """
-    Check the status of a training job.
-    """
-    result = get_training_status(job_id)
-    
-    # Update session state if we have the job
-    for session in sessions.values():
-        state = session.get("state")
-        if state and state.get("job_id") == job_id:
-            state["job_status"] = result["status"]
-            if result.get("metrics"):
-                state["metrics"] = result["metrics"]
-            break
-    
-    return TrainingStatusResponse(
-        job_id=job_id,
-        status=result["status"],
-        metrics=result.get("metrics"),
-        base_metrics=result.get("base_metrics"),
-        finetuned_metrics=result.get("finetuned_metrics"),
-        improvement=result.get("improvement"),
-        base_model=result.get("base_model"),
-        task_type=result.get("task_type"),
-        error=result.get("error"),
-        started_at=result.get("started_at"),
-        completed_at=result.get("completed_at"),
-        message=result.get("message"),
-    )
-
-
-@app.get("/download-model/{job_id}", response_model=ModelDownloadResponse)
-async def download_model_info(job_id: str):
-    """
-    Get download information for a trained model.
-    """
-    result = get_model_download_url(job_id)
-    
-    return ModelDownloadResponse(
-        job_id=job_id,
-        status=result["status"],
-        files=result.get("files"),
-        download_endpoint=result.get("download_endpoint"),
-        error=result.get("error"),
-        message=result.get("message"),
-    )
-
-
-@app.get("/download-model/{job_id}/{filename:path}")
-async def download_model_file(job_id: str, filename: str):
-    """
-    Download a specific file from the trained model.
-    """
-    from tunekit.training.modal_service import download_model_file_content
-    from pathlib import Path
-    
-    # Security: Sanitize filename to prevent path traversal
-    filename = os.path.basename(filename)  # Remove any path components
-    # Only allow safe characters
-    if not all(c.isalnum() or c in "._-/" for c in filename):
-        raise HTTPException(status_code=400, detail="Invalid filename")
-    
-    content = download_model_file_content(job_id, filename)
-    
-    if content is None:
-        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
-    
-    # Determine media type
-    if filename.endswith(".json"):
-        media_type = "application/json"
-    elif filename.endswith(".bin") or filename.endswith(".safetensors"):
-        media_type = "application/octet-stream"
-    else:
-        media_type = "application/octet-stream"
-    
-    from fastapi.responses import Response
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-@app.get("/download-model-zip/{job_id}")
-async def download_model_zip(job_id: str):
-    """
-    Download all model files as a ZIP archive.
-    Simple approach: Get file list from Modal, create ZIP here.
-    """
-    import io
-    import zipfile
-    
-    print(f"[API] Download ZIP requested for job: {job_id}")
-    
     try:
-        # Get file list and content from Modal
-        result = get_model_download_url(job_id)
+        # Read the dataset
+        data_path = state.get("file_path")
+        if not data_path or not os.path.exists(data_path):
+            raise HTTPException(status_code=404, detail="Dataset file not found")
         
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
+        with open(data_path, "r") as f:
+            dataset_jsonl = f.read()
         
-        files = result.get("files", [])
-        if not files:
-            raise HTTPException(status_code=404, detail="No model files found")
+        # Get model info
+        model_id = state["training_config"].get("model_name", "microsoft/Phi-4-mini-instruct")
+        model_name = state.get("model_name", "Phi-4 Mini")
         
-        print(f"[API] Found {len(files)} files, creating ZIP...")
+        # Build analysis dict
+        analysis = {
+            "num_examples": state.get("num_rows", 0),
+            "task_type": state.get("final_task_type", "chat"),
+            "model_size": state.get("model_size", "3B"),
+        }
         
-        # Create ZIP in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for file_info in files:
-                filename = file_info.get("name") or file_info.get("filename")  # Support both formats
-                if not filename:
-                    print(f"[API] Skipping file with no name: {file_info}")
-                    continue
-                
-                # Skip checkpoint directories - users only need the final model
-                if filename.startswith("checkpoint-"):
-                    print(f"[API] Skipping checkpoint file: {filename}")
-                    continue
-                    
-                # Download each file content
-                from tunekit.training.modal_service import download_model_file_content
-                content = download_model_file_content(job_id, filename)
-                if content:
-                    zf.writestr(filename, content)
-                    print(f"[API] Added: {filename} ({len(content)} bytes)")
-                else:
-                    print(f"[API] Warning: Failed to download {filename}")
-        
-        zip_buffer.seek(0)
-        zip_bytes = zip_buffer.read()
-        print(f"[API] ZIP created: {len(zip_bytes)} bytes")
-        
-        from fastapi.responses import Response
-        return Response(
-            content=zip_bytes,
-            media_type="application/zip",
-            headers={
-                "Content-Disposition": f"attachment; filename=tunekit_model_{job_id}.zip",
-                "Content-Length": str(len(zip_bytes)),
-            }
+        # Generate notebook
+        notebook_content = generate_training_notebook(
+            dataset_jsonl=dataset_jsonl,
+            model_id=model_id,
+            model_name=model_name,
+            analysis=analysis,
         )
         
-    except HTTPException:
-        raise
-    except KeyError as e:
-        print(f"[API] Missing key in file info: {e}")
-        print(f"[API] Files structure: {files[:2] if files else 'No files'}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Download failed: Invalid file structure - {str(e)}"
+        # Save notebook
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        notebook_filename = f"tunekit_train_{session_id[:8]}.ipynb"
+        notebook_path = os.path.join(output_dir, notebook_filename)
+        
+        save_notebook(notebook_content, notebook_path)
+        
+        # Save mapping for download
+        save_package_mapping(session_id, notebook_path)
+        
+        return ColabResponse(
+            session_id=session_id,
+            notebook_url=f"/download-notebook/{session_id}",
+            message="Notebook generated successfully!",
         )
+        
     except Exception as e:
         import traceback
-        print(f"[API] Error downloading ZIP: {e}")
-        print(f"[API] Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Download failed: {str(e)}"
-        )
+        print(f"[API] Error generating notebook: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to generate notebook: {str(e)}")
 
 
-# ============================================================================
-# MODEL COMPARISON
-# ============================================================================
-
-@app.post("/compare", response_model=CompareResponse)
-async def compare_models_endpoint(request: CompareRequest):
+@app.get("/download-notebook/{session_id}")
+async def download_notebook(session_id: str):
     """
-    Compare base model vs fine-tuned model predictions on custom input.
+    Download the generated Colab notebook.
     """
-    result = compare_models(request.job_id, request.text)
+    # Check persistent mapping first
+    mapping = load_package_mapping()
+    notebook_path = mapping.get(session_id)
     
-    if "error" in result:
-        return CompareResponse(error=result["error"])
+    if not notebook_path:
+        # Try to find in session
+        if session_id in sessions:
+            state = sessions[session_id].get("state", {})
+            notebook_path = state.get("notebook_path")
     
-    return CompareResponse(
-        base=result.get("base"),
-        finetuned=result.get("finetuned"),
+    if not notebook_path or not os.path.exists(notebook_path):
+        raise HTTPException(status_code=404, detail="Notebook not found. Please generate it first.")
+    
+    return FileResponse(
+        path=notebook_path,
+        media_type="application/x-ipynb+json",
+        filename=os.path.basename(notebook_path),
     )
 
 
