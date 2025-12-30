@@ -6,4 +6,4 @@ datasets
 fastapi
 uvicorn[standard]
 python-multipart
-modal
+nbformat
