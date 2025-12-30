@@ -2,12 +2,32 @@
 Colab Notebook Generator
 ========================
 Generates Jupyter notebooks for training SLMs on Google Colab.
+No external dependencies required - notebooks are just JSON!
 """
 
 import json
-import nbformat
-from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
-from typing import Dict
+import base64
+from typing import Dict, List
+
+
+def new_markdown_cell(source: str) -> dict:
+    """Create a markdown cell."""
+    return {
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": source.split('\n') if isinstance(source, str) else source
+    }
+
+
+def new_code_cell(source: str) -> dict:
+    """Create a code cell."""
+    return {
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": source.split('\n') if isinstance(source, str) else source
+    }
 
 
 def get_target_modules(model_id: str) -> list:
@@ -49,7 +69,7 @@ def generate_training_notebook(
     model_id: str,
     model_name: str,
     analysis: dict
-) -> dict:
+) -> str:
     """
     Generate a Jupyter notebook for training on Google Colab.
     
@@ -60,7 +80,7 @@ def generate_training_notebook(
         analysis: Dict from analyze.py with task_type, num_examples, etc.
     
     Returns:
-        Dict with notebook content in Jupyter format
+        String with notebook content in JSON format
     """
     
     # Extract analysis info
@@ -74,25 +94,31 @@ def generate_training_notebook(
     # Estimate training time
     est_time = estimate_training_time(num_examples, model_size)
     
-    # Escape the JSONL data for embedding in Python code
-    # We'll use base64 to avoid any escaping issues
-    import base64
+    # Encode the JSONL data as base64 to avoid escaping issues
     dataset_b64 = base64.b64encode(dataset_jsonl.encode()).decode()
     
-    # Create notebook
-    nb = new_notebook()
-    nb.metadata = {
-        "kernelspec": {
-            "display_name": "Python 3",
-            "language": "python",
-            "name": "python3"
+    # Build notebook structure
+    notebook = {
+        "nbformat": 4,
+        "nbformat_minor": 0,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+            },
+            "language_info": {
+                "name": "python",
+                "version": "3.10.0"
+            },
+            "accelerator": "GPU",
+            "gpuClass": "standard",
+            "colab": {
+                "provenance": [],
+                "gpuType": "T4"
+            }
         },
-        "language_info": {
-            "name": "python",
-            "version": "3.10.0"
-        },
-        "accelerator": "GPU",
-        "gpuClass": "standard"
+        "cells": []
     }
     
     cells = []
@@ -323,11 +349,12 @@ print("✓ Training complete!")
     # =========================================================================
     # Cell 7: Save Model
     # =========================================================================
+    model_slug = model_name.lower().replace(" ", "_").replace("-", "_")
     save_code = f'''# Save the fine-tuned model
 import shutil
 import os
 
-OUTPUT_DIR = "./fine_tuned_{model_name.lower().replace(" ", "_")}"
+OUTPUT_DIR = "./fine_tuned_{model_slug}"
 
 # Save LoRA adapter
 model.save_pretrained(OUTPUT_DIR)
@@ -403,7 +430,7 @@ base_model = AutoModelForCausalLM.from_pretrained("{model_id}")
 tokenizer = AutoTokenizer.from_pretrained("{model_id}")
 
 # Load your LoRA adapter
-model = PeftModel.from_pretrained(base_model, "./fine_tuned_{model_name.lower().replace(" ", "_")}")
+model = PeftModel.from_pretrained(base_model, "./fine_tuned_{model_slug}")
 ```
 
 ### Option 2: Merge & Export
@@ -425,10 +452,10 @@ tokenizer.push_to_hub("your-username/your-model-name")
     cells.append(new_markdown_cell(next_steps_md))
     
     # Add all cells to notebook
-    nb.cells = cells
+    notebook["cells"] = cells
     
-    # Convert to dict format
-    return nbformat.writes(nb)
+    # Return as JSON string
+    return json.dumps(notebook, indent=2)
 
 
 def save_notebook(notebook_content: str, output_path: str) -> str:
@@ -436,4 +463,3 @@ def save_notebook(notebook_content: str, output_path: str) -> str:
     with open(output_path, 'w') as f:
         f.write(notebook_content)
     return output_path
-
