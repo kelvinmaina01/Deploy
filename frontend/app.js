@@ -4,7 +4,8 @@
  * New flow: Upload → Questions → Recommendation → Training
  */
 
-const API_URL = 'http://localhost:8000';
+// Use relative URLs - works in both local and production
+const API_URL = '';
 
 // State
 let sessionId = null;
