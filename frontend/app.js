@@ -375,7 +375,22 @@ function showDatasetSummary(stats) {
         <span class="detail-label">Dataset Quality</span>
         <span class="detail-value quality-badge ${qualityClass}">${qualityLabel}</span>
     </div>`;
-    
+
+    html += '</div>';
+
+    // Training estimate section
+    const totalExamples = stats.total_examples || 0;
+    const avgTokens = Math.round((stats.avg_output_chars || 100) / 4);
+
+    // Estimate training time: ~1 min per 50 examples on T4
+    let trainingMin = Math.max(5, Math.round(totalExamples / 50));
+    if (trainingMin > 30) trainingMin = '25-35';
+    else if (trainingMin > 15) trainingMin = '15-25';
+    else trainingMin = `${trainingMin}-${trainingMin + 5}`;
+
+    html += '<div class="stats-estimate">';
+    html += '<div class="estimate-row"><span class="estimate-label">Est. Training Time</span><span class="estimate-value">' + trainingMin + ' min</span></div>';
+    html += '<div class="estimate-row"><span class="estimate-label">GPU Required</span><span class="estimate-value">Free T4 (Colab)</span></div>';
     html += '</div>';
     
     // Warnings if any
