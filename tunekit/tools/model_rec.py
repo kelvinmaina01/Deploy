@@ -351,10 +351,27 @@ def recommend_model(
         alt_reasons = []
         if score >= primary_score - 10:
             alt_reasons.append(f"Close match ({score}/100)")
-        if model['cost_base'] < MODELS[primary_key]['cost_base']:
-            alt_reasons.append(f"Lower cost (${model['cost_base']})")
+        
+        # Gated model notice (requires HuggingFace approval/agreement)
+        if model_key in ['llama-3.2-3b', 'gemma-3-2b']:
+            if model_key == 'llama-3.2-3b':
+                alt_reasons.append("Requires HuggingFace approval (gated)")
+            elif model_key == 'gemma-3-2b':
+                alt_reasons.append("Requires terms agreement (gated)")
+        
+        # Training speed benefit
         if model['training_time_base'] < MODELS[primary_key]['training_time_base']:
-            alt_reasons.append(f"Faster training")
+            time_diff = MODELS[primary_key]['training_time_base'] - model['training_time_base']
+            alt_reasons.append(f"~{time_diff} min faster training")
+        
+        # Memory efficiency
+        if model['memory_gb'] < MODELS[primary_key]['memory_gb']:
+            alt_reasons.append(f"Lower VRAM ({model['memory_gb']}GB vs {MODELS[primary_key]['memory_gb']}GB)")
+        
+        # Context window advantage
+        if model['context_window'] > MODELS[primary_key]['context_window']:
+            alt_reasons.append(f"Larger context ({model['context_window']//1000}K tokens)")
+        
         alternatives.append({
             'model': model_key,
             'score': score,
