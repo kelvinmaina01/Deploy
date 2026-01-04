@@ -236,11 +236,11 @@ async function uploadFile(file) {
         
         if (!response.ok) {
             let errorMsg = `Upload failed`;
+            const text = await response.text();
             try {
-                const error = await response.json();
+                const error = JSON.parse(text);
                 errorMsg = error.detail || error.message || errorMsg;
             } catch {
-                const text = await response.text();
                 errorMsg = text || errorMsg;
             }
             throw new Error(errorMsg);
@@ -911,11 +911,12 @@ async function getRecommendation() {
         
         if (!response.ok) {
             let errorMsg = 'Failed to get recommendation';
+            const text = await response.text();
             try {
-                const error = await response.json();
+                const error = JSON.parse(text);
                 errorMsg = error.detail || error.message || errorMsg;
             } catch {
-                errorMsg = await response.text() || errorMsg;
+                errorMsg = text || errorMsg;
             }
             throw new Error(errorMsg);
         }
@@ -1221,11 +1222,12 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
 
         if (!colabResponse.ok) {
             let errorMsg = 'Failed to generate notebook';
+            const text = await colabResponse.text();
             try {
-                const error = await colabResponse.json();
+                const error = JSON.parse(text);
                 errorMsg = error.detail || error.message || errorMsg;
             } catch {
-                errorMsg = await colabResponse.text() || errorMsg;
+                errorMsg = text || errorMsg;
             }
             throw new Error(errorMsg);
         }
@@ -1301,11 +1303,12 @@ async function generatePackage() {
 
         if (!response.ok) {
             let errorMsg = 'Package generation failed';
+            const text = await response.text();
             try {
-                const error = await response.json();
+                const error = JSON.parse(text);
                 errorMsg = error.detail || error.message || errorMsg;
             } catch {
-                errorMsg = await response.text() || errorMsg;
+                errorMsg = text || errorMsg;
             }
             throw new Error(errorMsg);
         }

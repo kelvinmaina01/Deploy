@@ -287,6 +287,9 @@ if conversations:
     # Cell 4: Load Model with Unsloth
     # =========================================================================
     load_model_code = f'''# Load model with Unsloth (4-bit quantization for memory efficiency)
+import os
+os.environ["TORCHDYNAMO_DISABLE"] = "1"  # Disable dynamo to avoid compilation errors
+
 from unsloth import FastLanguageModel
 import torch
 
