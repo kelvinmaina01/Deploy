@@ -3,107 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TuneKit - Fine-Tune LLMs in Minutes</title>
+    <title>TuneKit - Fine-Tune Small LLMs, Fast</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/landing.css">
 </head>
 <body>
-    <!-- Subtle gradient background -->
-    <div class="bg-glow"></div>
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
 
     <nav class="nav">
         <a href="/" class="logo">
-            <span class="logo-icon">⚡</span>
+            <span class="logo-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            </span>
             <span>TuneKit</span>
         </a>
-        <a href="/dashboard" class="nav-btn">Open Dashboard →</a>
+        <div class="nav-links">
+            <a href="https://github.com/riyanshibohra/TuneKit" class="nav-link" target="_blank">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+            </a>
+            <a href="/dashboard" class="nav-btn">Start Training</a>
+        </div>
     </nav>
 
     <main class="main">
+        <!-- Hero Section -->
         <section class="hero">
-            <div class="badge">Open Source · GPU-Powered</div>
-            <h1>Fine-tune LLMs<br><span class="gradient">without the complexity</span></h1>
-            <p>Upload your data, describe what you want, and get a trained model.<br>TuneKit handles model selection, hyperparameters, and cloud training.</p>
+            <div class="badge-row">
+                <span class="badge">Open Source</span>
+                <span class="badge badge-accent">Powered by Unsloth</span>
+            </div>
+
+            <h1>
+                Fine-tune SLMs<br>
+                <span class="gradient-text">2x faster, for free</span>
+            </h1>
+
+            <p class="hero-subtitle">
+                Upload your data. Get a trained model in 15 minutes.<br>
+                TuneKit handles model selection, LoRA config, and generates<br>
+                ready-to-run training code for Google Colab.
+            </p>
+
             <div class="hero-cta">
-                <a href="#setup" class="cta-primary">Get Started</a>
-                <a href="/dashboard" class="cta-secondary">View Dashboard</a>
+                <a href="/dashboard" class="btn-primary">
+                    <span>Start Fine-Tuning</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </a>
+                <a href="https://github.com/riyanshibohra/TuneKit" class="btn-secondary" target="_blank">
+                    View on GitHub
+                </a>
+            </div>
+
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="stat-value">2x</span>
+                    <span class="stat-label">Faster Setup</span>
+                    <span class="stat-desc">Skip the guesswork</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-value">Auto</span>
+                    <span class="stat-label">Task Detection</span>
+                    <span class="stat-desc">We classify your use case</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-value">$0</span>
+                    <span class="stat-label">Infrastructure</span>
+                    <span class="stat-desc">No servers, no setup fees</span>
+                </div>
             </div>
         </section>
 
+        <!-- How It Works -->
+        <section class="how-it-works">
+            <h2 class="section-title">How It Works</h2>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Upload Your Data</h3>
+                        <p>Drop a JSONL file with your conversations. TuneKit validates format and analyzes patterns.</p>
+                    </div>
+                </div>
+
+                <div class="step-connector">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Get AI Recommendations</h3>
+                        <p>We analyze your data and recommend the best model + hyperparameters for your task.</p>
+                    </div>
+                </div>
+
+                <div class="step-connector">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Train on Colab</h3>
+                        <p>One-click opens a ready-to-run notebook. Hit "Run All" and get your model in ~15 min.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Grid -->
         <section class="features">
-            <div class="feature">
-                <div class="feature-icon">📊</div>
-                <div class="feature-content">
-                    <h3>Smart data ingestion</h3>
-                    <p>Upload CSV, JSON, or JSONL. We auto-detect classification, NER, or instruction tuning.</p>
+            <h2 class="section-title">Why TuneKit?</h2>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon feature-icon-unsloth">
+                        <span class="unsloth-emoji">🦥</span>
+                    </div>
+                    <h3>Powered by Unsloth</h3>
+                    <p>2x faster training, 70% less memory. The fastest way to fine-tune on consumer GPUs.</p>
                 </div>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">🧠</div>
-                <div class="feature-content">
-                    <h3>AI-powered planning</h3>
-                    <p>GPT-4 analyzes your data and selects the optimal model and configuration.</p>
+
+                <div class="feature-card">
+                    <div class="feature-icon feature-icon-colab">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                    </div>
+                    <h3>Free GPU Training</h3>
+                    <p>Train on Google Colab's free T4 GPU. No credit card, no setup, no cloud bills.</p>
                 </div>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">☁️</div>
-                <div class="feature-content">
-                    <h3>One-click cloud training</h3>
-                    <p>Train on Modal's T4/A10G GPUs. Watch metrics stream in real-time.</p>
+
+                <div class="feature-card">
+                    <div class="feature-icon feature-icon-ai">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                    </div>
+                    <h3>Smart Model Selection</h3>
+                    <p>AI analyzes your data and recommends the best model for your use case.</p>
                 </div>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">📦</div>
-                <div class="feature-content">
-                    <h3>Production-ready output</h3>
-                    <p>Download your model with weights, tokenizer, and config — ready to deploy.</p>
+
+                <div class="feature-card">
+                    <div class="feature-icon feature-icon-export">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </div>
+                    <h3>Export Anywhere</h3>
+                    <p>Export to GGUF for Ollama, merged weights for HuggingFace, or LoRA adapters.</p>
                 </div>
             </div>
         </section>
 
-        <section class="setup" id="setup">
-            <div class="setup-card">
-                <div class="setup-header">
-                    <h2>Connect your API keys</h2>
-                    <p>Stored locally in your browser. Never sent to our servers.</p>
+        <!-- Supported Models -->
+        <section class="models">
+            <h2 class="section-title">Supported Models</h2>
+            <p class="section-subtitle">Fine-tune the latest small language models</p>
+
+            <div class="models-grid">
+                <div class="model-card">
+                    <span class="model-name">Phi-4</span>
+                    <span class="model-size">14B</span>
                 </div>
-                
-                <form class="form" id="apiKeyForm">
-                    <div class="field">
-                        <label for="openaiKey">OpenAI API Key</label>
-                        <input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off">
-                        <span class="hint"><a href="https://platform.openai.com/api-keys" target="_blank">Get your key →</a></span>
-                    </div>
-                    
-                    <div class="field">
-                        <label for="modalKey">Modal Token ID</label>
-                        <input type="password" id="modalKey" placeholder="ak-..." autocomplete="off">
-                        <span class="hint"><a href="https://modal.com/settings" target="_blank">Get your token →</a></span>
-                    </div>
-                    
-                    <div class="field">
-                        <label for="modalSecret">Modal Token Secret</label>
-                        <input type="password" id="modalSecret" placeholder="as-..." autocomplete="off">
-                    </div>
-                    
-                    <div class="form-status" id="formStatus"></div>
-                    
-                    <button type="submit" class="submit">Save & Continue →</button>
-                </form>
-                
-                <p class="skip"><a href="/dashboard">Skip for now — explore the dashboard</a></p>
+                <div class="model-card">
+                    <span class="model-name">Phi-3.5</span>
+                    <span class="model-size">3.8B</span>
+                </div>
+                <div class="model-card">
+                    <span class="model-name">Llama 3.2</span>
+                    <span class="model-size">3B</span>
+                </div>
+                <div class="model-card">
+                    <span class="model-name">Mistral</span>
+                    <span class="model-size">7B</span>
+                </div>
+                <div class="model-card">
+                    <span class="model-name">Gemma 2</span>
+                    <span class="model-size">2B</span>
+                </div>
+                <div class="model-card">
+                    <span class="model-name">Qwen 2.5</span>
+                    <span class="model-size">3B</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA Section -->
+        <section class="cta-section">
+            <div class="cta-card">
+                <h2>Ready to fine-tune?</h2>
+                <p>Upload your data and get a trained model in 15 minutes.</p>
+                <a href="/dashboard" class="btn-primary btn-large">
+                    <span>Open Dashboard</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </a>
             </div>
         </section>
     </main>
 
     <footer class="footer">
-        <span>Built with LangGraph + FastAPI + Modal</span>
-        <a href="/dashboard">Dashboard</a>
+        <div class="footer-content">
+            <span>Built with FastAPI + Unsloth</span>
+            <div class="footer-links">
+                <a href="https://github.com/riyanshibohra/TuneKit" target="_blank">GitHub</a>
+                <a href="/dashboard">Dashboard</a>
+            </div>
+        </div>
     </footer>
-
-    <script src="/static/landing.js"></script>
 </body>
 </html>
