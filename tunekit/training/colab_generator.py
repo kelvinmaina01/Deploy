@@ -509,47 +509,45 @@ Run the cells below to export your model to different formats.
     cells.append(new_markdown_cell(export_md))
 
     # =========================================================================
-    # Cell 10: Export to GGUF
+    # Cell 10: Export to GGUF (optional, skipped by default)
     # =========================================================================
-    export_gguf_code = f'''# Export to GGUF (for llama.cpp, Ollama, LM Studio)
-# Uncomment and run to export
+    export_gguf_code = f'''#@title Export to GGUF (for Ollama, LM Studio) - Optional
+#@markdown Check the box to enable export. **Adds ~5-10 min.**
+run_gguf_export = False  #@param {{type:"boolean"}}
 
-GGUF_OUTPUT = "./fine_tuned_{model_slug}_gguf"
+if run_gguf_export:
+    GGUF_OUTPUT = "./fine_tuned_{model_slug}_gguf"
+    QUANT_METHOD = "q4_k_m"  # Good balance of size/quality
 
-# Choose quantization (q4_k_m is good balance of size/quality)
-# Options: q4_k_m, q5_k_m, q8_0, f16
-QUANT_METHOD = "q4_k_m"
+    print(f"Exporting to GGUF ({{QUANT_METHOD}})...")
+    model.save_pretrained_gguf(GGUF_OUTPUT, tokenizer, quantization_method=QUANT_METHOD)
+    print(f"GGUF model saved to: {{GGUF_OUTPUT}}")
 
-print(f"Exporting to GGUF ({{QUANT_METHOD}})...")
-model.save_pretrained_gguf(GGUF_OUTPUT, tokenizer, quantization_method=QUANT_METHOD)
-print(f"GGUF model saved to: {{GGUF_OUTPUT}}")
-
-# Create zip for download
-import shutil
-shutil.make_archive(GGUF_OUTPUT, 'zip', GGUF_OUTPUT)
-print(f"\\nDownload: {{GGUF_OUTPUT}}.zip")
+    import shutil
+    shutil.make_archive(GGUF_OUTPUT, 'zip', GGUF_OUTPUT)
+    print(f"\\nDownload: {{GGUF_OUTPUT}}.zip")
+else:
+    print("Skipped GGUF export. Check the box above and re-run if needed.")
 '''
-    cells.append(new_code_cell(export_gguf_code))
+    cells.append(new_code_cell(export_gguf_code, collapsed=True))
 
     # =========================================================================
-    # Cell 11: Export Merged Model
+    # Cell 11: Export Merged Model (optional, skipped by default)
     # =========================================================================
-    export_merged_code = f'''# Export merged model (LoRA merged into base weights)
-# Uncomment and run to export
+    export_merged_code = f'''#@title Export Merged Model (for HuggingFace) - Optional
+#@markdown Check the box to enable export. **Adds ~3-5 min.**
+run_merged_export = False  #@param {{type:"boolean"}}
 
-MERGED_OUTPUT = "./fine_tuned_{model_slug}_merged"
+if run_merged_export:
+    MERGED_OUTPUT = "./fine_tuned_{model_slug}_merged"
 
-# 16-bit (full precision, HuggingFace compatible)
-print("Exporting 16-bit merged model...")
-model.save_pretrained_merged(MERGED_OUTPUT + "_16bit", tokenizer, save_method="merged_16bit")
-print(f"Saved to: {{MERGED_OUTPUT}}_16bit")
-
-# # 4-bit (quantized, smaller file)
-# print("\\nExporting 4-bit merged model...")
-# model.save_pretrained_merged(MERGED_OUTPUT + "_4bit", tokenizer, save_method="merged_4bit_forced")
-# print(f"Saved to: {{MERGED_OUTPUT}}_4bit")
+    print("Exporting 16-bit merged model...")
+    model.save_pretrained_merged(MERGED_OUTPUT + "_16bit", tokenizer, save_method="merged_16bit")
+    print(f"Saved to: {{MERGED_OUTPUT}}_16bit")
+else:
+    print("Skipped merged export. Check the box above and re-run if needed.")
 '''
-    cells.append(new_code_cell(export_merged_code))
+    cells.append(new_code_cell(export_merged_code, collapsed=True))
 
     # =========================================================================
     # Cell 12: Download Instructions (Markdown)
