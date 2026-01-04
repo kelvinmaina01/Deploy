@@ -506,8 +506,8 @@ a {
     transform: scale(1);
     filter: blur(0);
     pointer-events: auto;
-    border-color: var(--accent);
-    box-shadow: 0 20px 60px rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.12);
 }
 
 .carousel-btn {
@@ -556,7 +556,7 @@ a {
 
 .feature-card.active:hover {
     transform: scale(1.02);
-    box-shadow: 0 24px 70px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 16px 50px rgba(59, 130, 246, 0.15);
 }
 
 .feature-icon {
@@ -575,7 +575,13 @@ a {
 }
 
 .feature-icon-colab {
-    background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+    background: transparent;
+}
+
+.feature-icon-colab img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .feature-icon-ai {
@@ -717,17 +723,19 @@ a {
 
 /* CTA Section */
 .cta-section {
-    padding: 40px 0;
+    padding: 40px 0 60px;
 }
 
 .cta-card {
     text-align: center;
-    padding: 60px 40px;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.08) 50%, rgba(236, 72, 153, 0.05) 100%);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: 24px;
+    padding: 48px 40px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 20px;
     position: relative;
     overflow: hidden;
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .cta-card::before {
@@ -738,19 +746,49 @@ a {
     right: 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent), var(--purple), transparent);
+    opacity: 0.5;
 }
 
 .cta-card h2 {
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 700;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     letter-spacing: -0.02em;
 }
 
 .cta-card p {
-    font-size: 16px;
+    font-size: 15px;
     color: var(--text-secondary);
-    margin-bottom: 28px;
+    margin-bottom: 24px;
+}
+
+.cta-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 24px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 15px;
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.btn-ghost:hover {
+    background: var(--bg-card);
+    border-color: var(--border-hover);
+    color: var(--text);
 }
 
 /* Footer */
@@ -908,12 +946,32 @@ a {
         padding: 0 16px;
     }
 
+    .cta-section {
+        padding: 30px 0 50px;
+    }
+
     .cta-card {
-        padding: 40px 24px;
+        padding: 36px 24px;
+        border-radius: 16px;
     }
 
     .cta-card h2 {
-        font-size: 26px;
+        font-size: 22px;
+    }
+
+    .cta-card p {
+        font-size: 14px;
+    }
+
+    .cta-buttons {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .cta-buttons .btn-primary,
+    .cta-buttons .btn-ghost {
+        width: 100%;
+        justify-content: center;
     }
 
     .footer {
