@@ -1,65 +1,115 @@
 /**
- * TuneKit Landing
+ * TuneKit Landing Page
  */
 
-const form = document.getElementById('apiKeyForm');
-const status = document.getElementById('formStatus');
+// Features Carousel
+(function initCarousel() {
+    function setupCarousel() {
+        const track = document.querySelector('.carousel-track');
+        const cards = document.querySelectorAll('.feature-card');
+        const prevBtn = document.querySelector('.carousel-btn-prev');
+        const nextBtn = document.querySelector('.carousel-btn-next');
 
-// Load saved keys
-function loadKeys() {
-    const keys = {
-        openaiKey: localStorage.getItem('tunekit_openai_key'),
-        modalKey: localStorage.getItem('tunekit_modal_key'),
-        modalSecret: localStorage.getItem('tunekit_modal_secret')
-    };
-    
-    Object.entries(keys).forEach(([id, value]) => {
-        const input = document.getElementById(id);
-        if (input && value) input.value = value;
-    });
-}
+        if (!track || !cards.length) return;
 
-loadKeys();
+        let currentIndex = 0;
 
-// Form submit
-form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    
-    const openaiKey = document.getElementById('openaiKey').value.trim();
-    const modalKey = document.getElementById('modalKey').value.trim();
-    const modalSecret = document.getElementById('modalSecret').value.trim();
-    
-    status.className = 'form-status';
-    
-    // Basic validation
-    if (openaiKey && !openaiKey.startsWith('sk-')) {
-        showStatus('OpenAI key should start with "sk-"', 'error');
-        return;
+        function getCardWidth() {
+            return window.innerWidth < 768 ? 280 : 340;
+        }
+
+        function getGap() {
+            return window.innerWidth < 768 ? 20 : 30;
+        }
+
+        function updateCarousel() {
+            const cardWidth = getCardWidth();
+            const gap = getGap();
+
+            // Calculate offset: center the current card
+            // Track is at left: 50%, so we need to offset by half card width plus the slide offset
+            const totalCardWidth = cardWidth + gap;
+            const offset = -(cardWidth / 2) - (currentIndex * totalCardWidth);
+
+            track.style.transform = `translateX(${offset}px)`;
+
+            cards.forEach((card, index) => {
+                card.classList.toggle('active', index === currentIndex);
+            });
+
+            prevBtn.disabled = currentIndex === 0;
+            nextBtn.disabled = currentIndex === cards.length - 1;
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateCarousel();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentIndex < cards.length - 1) {
+                currentIndex++;
+                updateCarousel();
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const featuresSection = document.querySelector('.features');
+            const rect = featuresSection.getBoundingClientRect();
+            const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+
+            if (isVisible) {
+                if (e.key === 'ArrowLeft' && currentIndex > 0) {
+                    currentIndex--;
+                    updateCarousel();
+                } else if (e.key === 'ArrowRight' && currentIndex < cards.length - 1) {
+                    currentIndex++;
+                    updateCarousel();
+                }
+            }
+        });
+
+        // Touch/swipe support
+        let touchStartX = 0;
+
+        track.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        track.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].screenX;
+            const diff = touchStartX - touchEndX;
+            const swipeThreshold = 50;
+
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0 && currentIndex < cards.length - 1) {
+                    currentIndex++;
+                    updateCarousel();
+                } else if (diff < 0 && currentIndex > 0) {
+                    currentIndex--;
+                    updateCarousel();
+                }
+            }
+        }, { passive: true });
+
+        // Handle window resize
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(updateCarousel, 100);
+        });
+
+        // Initialize
+        updateCarousel();
     }
-    
-    if (modalKey && !modalKey.startsWith('ak-')) {
-        showStatus('Modal Token ID should start with "ak-"', 'error');
-        return;
-    }
-    
-    if (modalSecret && !modalSecret.startsWith('as-')) {
-        showStatus('Modal Secret should start with "as-"', 'error');
-        return;
-    }
-    
-    // Save
-    if (openaiKey) localStorage.setItem('tunekit_openai_key', openaiKey);
-    if (modalKey) localStorage.setItem('tunekit_modal_key', modalKey);
-    if (modalSecret) localStorage.setItem('tunekit_modal_secret', modalSecret);
-    
-    showStatus('Saved! Redirecting...', 'success');
-    
-    setTimeout(() => {
-        window.location.href = '/dashboard';
-    }, 500);
-});
 
-function showStatus(msg, type) {
-    status.textContent = msg;
-    status.className = `form-status ${type}`;
-}
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupCarousel);
+    } else {
+        setupCarousel();
+    }
+})();

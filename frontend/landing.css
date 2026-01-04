@@ -456,28 +456,107 @@ a {
 /* Features */
 .features {
     padding: 80px 0;
+    position: relative;
+    overflow: hidden;
 }
 
-.features-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    max-width: 800px;
+.features-carousel {
+    position: relative;
+    max-width: 1200px;
     margin: 0 auto;
+    padding: 40px 0;
+}
+
+.carousel-container {
+    position: relative;
+    overflow: visible;
+    height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.carousel-track {
+    display: flex;
+    gap: 30px;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    align-items: center;
+    position: absolute;
+    left: 50%;
 }
 
 .feature-card {
-    padding: 32px;
+    flex: 0 0 340px;
+    min-height: 240px;
+    padding: 36px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: 20px;
-    transition: all 0.3s;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    opacity: 0.3;
+    transform: scale(0.8);
+    filter: blur(3px);
+    pointer-events: none;
 }
 
-.feature-card:hover {
-    border-color: var(--border-hover);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+.feature-card.active {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+    pointer-events: auto;
+    border-color: var(--accent);
+    box-shadow: 0 20px 60px rgba(59, 130, 246, 0.25);
+}
+
+.carousel-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.carousel-btn:hover {
+    background: var(--bg-card);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.carousel-btn:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.carousel-btn-prev {
+    left: calc(50% - 280px);
+}
+
+.carousel-btn-next {
+    right: calc(50% - 280px);
+}
+
+.carousel-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.feature-card.active:hover {
+    transform: scale(1.02);
+    box-shadow: 0 24px 70px rgba(59, 130, 246, 0.3);
 }
 
 .feature-icon {
@@ -525,47 +604,115 @@ a {
 
 /* Models */
 .models {
-    padding: 60px 0 80px;
+    padding: 80px 0;
 }
 
-.models-grid {
+.models-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 12px;
-    justify-content: center;
     max-width: 700px;
     margin: 0 auto;
 }
 
-.model-card {
+.model-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    transition: all 0.25s;
+    text-decoration: none;
+}
+
+.model-row:hover {
+    border-color: var(--accent);
+    transform: translateX(4px);
+    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.12);
+}
+
+.model-row:hover .model-link-icon {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.model-info {
+    flex: 1;
+}
+
+.model-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 20px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    transition: all 0.2s;
-}
-
-.model-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.1);
+    margin-bottom: 6px;
 }
 
 .model-name {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
+    color: var(--text);
 }
 
-.model-size {
-    font-size: 12px;
+.model-badge {
+    font-size: 11px;
     padding: 3px 8px;
     background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--text-muted);
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.model-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.model-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: 24px;
+}
+
+.model-size {
+    font-size: 14px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, var(--accent-glow), var(--purple-glow));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 8px;
+    color: var(--accent-light);
+    font-weight: 600;
+}
+
+.model-link-icon {
+    opacity: 0.4;
+    color: var(--text-muted);
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.models-note {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 32px;
+}
+
+.models-note a {
+    color: var(--accent-light);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.models-note a:hover {
+    color: var(--accent);
 }
 
 /* CTA Section */
@@ -700,16 +847,65 @@ a {
         margin: 8px 0;
     }
 
-    .features-grid {
-        grid-template-columns: 1fr;
+    .features-carousel {
+        padding: 20px 0;
     }
 
-    .feature-highlight {
-        grid-column: span 1;
+    .carousel-container {
+        height: 300px;
+    }
+
+    .carousel-track {
+        gap: 20px;
+    }
+
+    .feature-card {
+        flex: 0 0 280px;
+        min-height: 220px;
+        padding: 24px;
+    }
+
+    .carousel-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .carousel-btn-prev {
+        left: calc(50% - 200px);
+    }
+
+    .carousel-btn-next {
+        right: calc(50% - 200px);
     }
 
     .section-title {
         font-size: 26px;
+    }
+
+    .models-list {
+        gap: 10px;
+    }
+
+    .model-row {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 18px 20px;
+        gap: 12px;
+    }
+
+    .model-meta {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .model-desc {
+        font-size: 13px;
+    }
+
+    .models-note {
+        font-size: 13px;
+        padding: 0 16px;
     }
 
     .cta-card {
