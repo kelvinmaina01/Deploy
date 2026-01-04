@@ -9,8 +9,13 @@ import sys
 import shutil
 import uuid
 import json
+import requests
 from datetime import datetime
 from typing import Optional
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -159,10 +164,66 @@ class ColabResponse(BaseModel):
     notebook_url: str
     message: str
     status: str
+    colab_url: Optional[str] = None  # Direct Colab URL (via Gist)
+    gist_url: Optional[str] = None   # GitHub Gist URL
     files: Optional[list] = None
     download_endpoint: Optional[str] = None
     error: Optional[str] = None
-    message: Optional[str] = None
+
+
+def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipynb") -> dict:
+    """
+    Upload notebook to GitHub Gist and return URLs.
+
+    Returns:
+        dict with 'gist_url', 'colab_url', or 'error'
+    """
+    github_token = os.getenv("GITHUB_TOKEN")
+
+    if not github_token:
+        return {"error": "GITHUB_TOKEN not configured"}
+
+    try:
+        response = requests.post(
+            "https://api.github.com/gists",
+            headers={
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json",
+            },
+            json={
+                "description": "TuneKit Training Notebook - Fine-tune your model on Google Colab",
+                "public": False,  # Secret gist (unlisted but accessible via URL)
+                "files": {
+                    filename: {
+                        "content": notebook_content
+                    }
+                }
+            },
+            timeout=30,
+        )
+
+        if response.status_code == 201:
+            data = response.json()
+            gist_id = data["id"]
+            owner = data["owner"]["login"]
+            gist_url = data["html_url"]
+
+            # Colab can open gists directly
+            colab_url = f"https://colab.research.google.com/gist/{owner}/{gist_id}/{filename}"
+
+            return {
+                "gist_url": gist_url,
+                "colab_url": colab_url,
+                "gist_id": gist_id,
+            }
+        else:
+            error_msg = response.json().get("message", "Unknown error")
+            print(f"[Gist] Failed to create gist: {response.status_code} - {error_msg}")
+            return {"error": f"GitHub API error: {error_msg}"}
+
+    except Exception as e:
+        print(f"[Gist] Exception: {e}")
+        return {"error": str(e)}
 
 
 # ============================================================================
@@ -843,14 +904,29 @@ async def generate_colab_notebook(request: ColabRequest):
         notebook_path = os.path.join(output_dir, notebook_filename)
         
         save_notebook(notebook_content, notebook_path)
-        
+
         # Save mapping for download
         save_package_mapping(session_id, notebook_path)
-        
+
+        # Upload to GitHub Gist for direct Colab access
+        gist_result = upload_to_gist(notebook_content, notebook_filename)
+
+        colab_url = gist_result.get("colab_url")
+        gist_url = gist_result.get("gist_url")
+
+        if colab_url:
+            print(f"[API] Notebook uploaded to Gist: {gist_url}")
+            print(f"[API] Colab URL: {colab_url}")
+        else:
+            print(f"[API] Gist upload failed: {gist_result.get('error')}")
+
         return ColabResponse(
             session_id=session_id,
             notebook_url=f"/download-notebook/{session_id}",
             message="Notebook generated successfully!",
+            status="success",
+            colab_url=colab_url,
+            gist_url=gist_url,
         )
         
     except Exception as e:

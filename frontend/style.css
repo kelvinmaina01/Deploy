@@ -2961,6 +2961,47 @@ body {
 }
 
 /* Notebook Ready */
+.colab-instructions {
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 24px 0;
+    text-align: left;
+}
+
+.instruction-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.instruction-step:last-child {
+    border-bottom: none;
+}
+
+.instruction-step .step-num {
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.instruction-step code {
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
 .notebook-actions {
     display: flex;
     gap: 12px;

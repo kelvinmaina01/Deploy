@@ -18,21 +18,23 @@ from typing import Dict, List
 
 def new_markdown_cell(source: str) -> dict:
     """Create a markdown cell."""
+    # Jupyter expects source as list of lines WITH newlines, or as a single string
     return {
         "cell_type": "markdown",
         "metadata": {},
-        "source": source.split('\n') if isinstance(source, str) else source
+        "source": source  # Keep as single string - Jupyter handles it fine
     }
 
 
 def new_code_cell(source: str) -> dict:
     """Create a code cell."""
+    # Jupyter expects source as list of lines WITH newlines, or as a single string
     return {
         "cell_type": "code",
         "execution_count": None,
         "metadata": {},
         "outputs": [],
-        "source": source.split('\n') if isinstance(source, str) else source
+        "source": source  # Keep as single string - Jupyter handles it fine
     }
 
 
@@ -206,10 +208,10 @@ def generate_training_notebook(
 # Verify GPU
 import torch
 if torch.cuda.is_available():
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
+    print(f"   Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
 else:
-    print("WARNING: No GPU! Go to Runtime > Change runtime type > T4 GPU")
+    print("⚠️ WARNING: No GPU! Go to Runtime > Change runtime type > T4 GPU")
 """
     cells.append(new_code_cell(install_code))
 

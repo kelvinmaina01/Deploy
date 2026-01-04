@@ -1234,14 +1234,77 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
 
         const data = await colabResponse.json();
 
-        // Show notebook ready view
-        document.getElementById('trainingOptions').classList.add('hidden');
-        document.getElementById('notebookReady').classList.remove('hidden');
+        // Check if we have a direct Colab URL (via Gist)
+        if (data.colab_url) {
+            // Open Colab directly with notebook loaded!
+            window.open(data.colab_url, '_blank');
 
-        // Set download link
-        const downloadBtn = document.getElementById('downloadNotebookBtn');
-        if (downloadBtn) {
-            downloadBtn.href = `${API_URL}${data.notebook_url}`;
+            // Show success view
+            document.getElementById('trainingOptions').classList.add('hidden');
+            document.getElementById('notebookReady').classList.remove('hidden');
+
+            // Update the UI to show it opened directly
+            const notebookReady = document.getElementById('notebookReady');
+            if (notebookReady) {
+                notebookReady.querySelector('h2').textContent = 'Colab Opened!';
+                notebookReady.querySelector('p').textContent = 'Your notebook is ready in the new tab';
+
+                // Update instructions for direct open
+                const instructions = notebookReady.querySelector('.colab-instructions');
+                if (instructions) {
+                    instructions.innerHTML = `
+                        <div class="instruction-step">
+                            <span class="step-num">1</span>
+                            <span><strong>Runtime → Change runtime type → T4 GPU</strong></span>
+                        </div>
+                        <div class="instruction-step">
+                            <span class="step-num">2</span>
+                            <span>Click <strong>Runtime → Run all</strong></span>
+                        </div>
+                        <div class="instruction-step">
+                            <span class="step-num">3</span>
+                            <span>Wait for training to complete (~15 min)</span>
+                        </div>
+                    `;
+                }
+            }
+
+            // Update buttons
+            const downloadBtn = document.getElementById('downloadNotebookBtn');
+            if (downloadBtn) {
+                downloadBtn.href = `${API_URL}${data.notebook_url}`;
+            }
+
+            // Update "Open Colab Again" button to use direct URL
+            const openColabAgainBtn = notebookReady.querySelector('a[href*="colab.research.google.com"]');
+            if (openColabAgainBtn) {
+                openColabAgainBtn.href = data.colab_url;
+            }
+
+        } else {
+            // Fallback: Download notebook and open Colab manually
+            const downloadUrl = `${API_URL}${data.notebook_url}`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = data.notebook_url.split('/').pop() || 'tunekit_training.ipynb';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Open Google Colab in new tab after short delay
+            setTimeout(() => {
+                window.open('https://colab.research.google.com/#create=true', '_blank');
+            }, 500);
+
+            // Show notebook ready view with upload instructions
+            document.getElementById('trainingOptions').classList.add('hidden');
+            document.getElementById('notebookReady').classList.remove('hidden');
+
+            // Set download link for manual download
+            const downloadBtn = document.getElementById('downloadNotebookBtn');
+            if (downloadBtn) {
+                downloadBtn.href = downloadUrl;
+            }
         }
 
     } catch (error) {
