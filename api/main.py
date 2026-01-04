@@ -701,6 +701,7 @@ async def plan(request: PlanRequest):
     
     state["final_task_type"] = user_task
     state["base_model"] = model_id
+    state["model_name"] = selected_model_name
     state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {selected_model_name}."
     
     # Create training config for chat-based fine-tuning with LoRA
