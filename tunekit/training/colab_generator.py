@@ -26,13 +26,17 @@ def new_markdown_cell(source: str) -> dict:
     }
 
 
-def new_code_cell(source: str) -> dict:
+def new_code_cell(source: str, collapsed: bool = False) -> dict:
     """Create a code cell."""
     # Jupyter expects source as list of lines WITH newlines, or as a single string
+    metadata = {}
+    if collapsed:
+        # Colab respects cellView: "form" to collapse cells
+        metadata["cellView"] = "form"
     return {
         "cell_type": "code",
         "execution_count": None,
-        "metadata": {},
+        "metadata": metadata,
         "outputs": [],
         "source": source  # Keep as single string - Jupyter handles it fine
     }
@@ -261,9 +265,9 @@ Otherwise, skip this cell.
         cells.append(new_code_cell(hf_login_code))
 
     # =========================================================================
-    # Cell 4: Embed Dataset
+    # Cell 4: Embed Dataset (collapsed by default - large base64 data)
     # =========================================================================
-    dataset_code = f'''# Load your training dataset
+    dataset_code = f'''#@title Load Training Dataset (click to expand)
 import base64
 import json
 
@@ -283,7 +287,7 @@ if conversations:
         content = msg.get("content", "")[:100]
         print(f"  {{role}}: {{content}}...")
 '''
-    cells.append(new_code_cell(dataset_code))
+    cells.append(new_code_cell(dataset_code, collapsed=True))
 
     # =========================================================================
     # Cell 4: Load Model with Unsloth
