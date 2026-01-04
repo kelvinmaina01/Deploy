@@ -1812,6 +1812,7 @@ body {
     background: var(--accent-muted);
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
+    transform: translateY(-2px);
 }
 
 .option-card.compact {
