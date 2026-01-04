@@ -1292,13 +1292,13 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
             }
 
             // Update "Open Colab Again" button to use direct URL
-            const openColabAgainBtn = notebookReady.querySelector('a[href*="colab.research.google.com"]');
-            if (openColabAgainBtn) {
-                openColabAgainBtn.href = data.colab_url;
+            const openColabBtn = document.getElementById('openColabBtn');
+            if (openColabBtn) {
+                openColabBtn.href = data.colab_url;
             }
 
         } else {
-            // Fallback: Download notebook and open Colab manually
+            // Fallback: Download notebook (no Gist available)
             const downloadUrl = `${API_URL}${data.notebook_url}`;
             const link = document.createElement('a');
             link.href = downloadUrl;
@@ -1307,12 +1307,7 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
             link.click();
             document.body.removeChild(link);
 
-            // Open Google Colab in new tab after short delay
-            setTimeout(() => {
-                window.open('https://colab.research.google.com/#create=true', '_blank');
-            }, 500);
-
-            // Show notebook ready view with upload instructions
+            // Show notebook ready view with upload instructions (don't open empty Colab)
             document.getElementById('trainingOptions').classList.add('hidden');
             document.getElementById('notebookReady').classList.remove('hidden');
 
@@ -1321,6 +1316,8 @@ document.getElementById('openColabBtn')?.addEventListener('click', async () => {
             if (downloadBtn) {
                 downloadBtn.href = downloadUrl;
             }
+
+            // "Open Colab" button keeps its default href (colab.research.google.com)
         }
 
     } catch (error) {
