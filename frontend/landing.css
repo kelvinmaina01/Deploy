@@ -218,9 +218,57 @@ a {
 .hero-subtitle {
     font-size: 18px;
     color: var(--text-secondary);
-    max-width: 560px;
-    margin: 0 auto 40px;
+    max-width: 680px;
+    margin: 0 auto 24px;
     line-height: 1.7;
+}
+
+.hero-subtitle strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.hero-feature {
+    max-width: 680px;
+    margin: 0 auto 40px;
+    padding: 16px 24px;
+    background: rgba(59, 130, 246, 0.08);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+}
+
+.hero-feature span {
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.hero-subtitle .highlight {
+    color: var(--accent-light);
+    font-weight: 600;
+    position: relative;
+    display: inline-block;
+}
+
+.hero-subtitle .highlight::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    opacity: 0.3;
+    border-radius: 2px;
+}
+
+.hero-subtitle .highlight-accent {
+    background: linear-gradient(135deg, var(--accent-light), var(--purple-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 600;
+    position: relative;
 }
 
 .hero-cta {
