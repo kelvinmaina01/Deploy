@@ -139,6 +139,17 @@ def generate_training_notebook(
     # Encode the JSONL data as base64 to avoid escaping issues
     dataset_b64 = base64.b64encode(dataset_jsonl.encode()).decode()
 
+    # Extract system prompt from dataset if present
+    system_prompt = None
+    try:
+        first_line = dataset_jsonl.strip().split('\n')[0]
+        first_example = json.loads(first_line)
+        messages = first_example.get("messages", [])
+        if messages and messages[0].get("role") == "system":
+            system_prompt = messages[0].get("content", "")
+    except (json.JSONDecodeError, IndexError, KeyError):
+        pass
+
     # Build notebook structure
     notebook = {
         "nbformat": 4,
@@ -456,12 +467,28 @@ for f in files:
     # =========================================================================
     # Cell 8: Test Inference
     # =========================================================================
-    test_code = '''# Test your fine-tuned model
+    # Build system prompt setup code if present
+    if system_prompt:
+        # Escape the system prompt for Python string
+        escaped_system_prompt = system_prompt.replace('\\', '\\\\').replace("'''", "\\'\\'\\'").replace('"""', '\\"\\"\\"')
+        system_prompt_code = f'''# System prompt from your training data
+SYSTEM_PROMPT = """{escaped_system_prompt}"""
+
+'''
+        messages_code = '''messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt}
+    ]'''
+    else:
+        system_prompt_code = ""
+        messages_code = '''messages = [{"role": "user", "content": prompt}]'''
+
+    test_code = f'''# Test your fine-tuned model
 FastLanguageModel.for_inference(model)  # Enable faster inference
 
-def generate_response(prompt, max_new_tokens=256):
+{system_prompt_code}def generate_response(prompt, max_new_tokens=256):
     """Generate a response from the fine-tuned model."""
-    messages = [{"role": "user", "content": prompt}]
+    {messages_code}
 
     text = tokenizer.apply_chat_template(
         messages,
@@ -492,9 +519,9 @@ test_prompts = [
 print("Testing fine-tuned model:")
 print("=" * 50)
 for prompt in test_prompts:
-    print(f"\\nUser: {prompt}")
+    print(f"\\nUser: {{prompt}}")
     response = generate_response(prompt)
-    print(f"Assistant: {response}")
+    print(f"Assistant: {{response}}")
     print("-" * 50)
 '''
     cells.append(new_code_cell(test_code))
