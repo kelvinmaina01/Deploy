@@ -1,6 +1,6 @@
 # TuneKit
 
-**Fine-tune any SLM in 15 minutes. No setup. No cost. Just results.**
+**Fine-tune SLMs in 15 minutes. No setup. No cost. Just results.**
 
 <p align="center">
   <a href="https://tunekit.app"><strong>Try it now at tunekit.app</strong></a>
