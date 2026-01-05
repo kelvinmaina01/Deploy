@@ -4,6 +4,38 @@
  * New flow: Upload → Questions → Recommendation → Training
  */
 
+// Theme Toggle - Initialize immediately to prevent flash
+(function() {
+    const html = document.documentElement;
+    const savedTheme = localStorage.getItem('tunekit-theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    if (savedTheme) {
+        html.setAttribute('data-theme', savedTheme);
+    } else if (!systemPrefersDark) {
+        html.setAttribute('data-theme', 'light');
+    }
+
+    // Set up toggle after DOM loads
+    document.addEventListener('DOMContentLoaded', () => {
+        const toggle = document.getElementById('themeToggle');
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                const currentTheme = html.getAttribute('data-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+                if (newTheme === 'dark') {
+                    html.removeAttribute('data-theme');
+                } else {
+                    html.setAttribute('data-theme', newTheme);
+                }
+
+                localStorage.setItem('tunekit-theme', newTheme);
+            });
+        }
+    });
+})();
+
 // Use relative URLs - works in both local and production
 const API_URL = '';
 
