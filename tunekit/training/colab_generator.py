@@ -238,24 +238,24 @@ else:
 
 **`{model_id}`** is a gated model. You must:
 1. **Accept the license** at [huggingface.co/{model_id}](https://huggingface.co/{model_id})
-2. **Run the cell below** and enter your HuggingFace token
+2. **Paste your token below** and run the cell
 
 Get your token at: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 """
         cells.append(new_markdown_cell(hf_login_md))
 
-        hf_login_code = """# Login to HuggingFace (required for gated models)
+        hf_login_code = '''#@title HuggingFace Login (Required for this model)
+#@markdown Paste your HuggingFace token below. Get one at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+HF_TOKEN = ""  #@param {type:"string"}
+
+if not HF_TOKEN or not HF_TOKEN.startswith("hf_"):
+    raise ValueError("⛔ STOP: Please paste your HuggingFace token above (starts with 'hf_') and re-run this cell.")
+
 from huggingface_hub import login
-
-# Option 1: Interactive login (will prompt for token)
-login()
-
-# Option 2: Direct token (uncomment and paste your token)
-# login(token="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
-
-print("Successfully logged in to HuggingFace!")
-"""
-        cells.append(new_code_cell(hf_login_code))
+login(token=HF_TOKEN)
+print("✅ Successfully logged in to HuggingFace!")
+'''
+        cells.append(new_code_cell(hf_login_code, collapsed=True))
     else:
         # For non-gated models, add optional login cell
         hf_login_md = """## HuggingFace Login (Optional)
