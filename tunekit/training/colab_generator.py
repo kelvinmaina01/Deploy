@@ -187,7 +187,7 @@ def generate_training_notebook(
 > 2. Login with your HuggingFace token (Cell 3 below)
 """
 
-    title_md = f"""# Fine-Tune {model_name} with Unsloth
+    title_md = f"""# TuneKit: Fine-Tune {model_name}
 
 ## Dataset Overview
 | Metric | Value |
@@ -219,8 +219,11 @@ def generate_training_notebook(
     install_code = """%%capture
 # Install Unsloth - 2x faster training, 70% less memory
 !pip install unsloth
+"""
+    cells.append(new_code_cell(install_code))
 
-# Verify GPU
+    # GPU verification (separate cell so output is visible)
+    gpu_check_code = """# Verify GPU
 import torch
 if torch.cuda.is_available():
     print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
@@ -228,7 +231,7 @@ if torch.cuda.is_available():
 else:
     print("⚠️ WARNING: No GPU! Go to Runtime > Change runtime type > T4 GPU")
 """
-    cells.append(new_code_cell(install_code))
+    cells.append(new_code_cell(gpu_check_code))
 
     # =========================================================================
     # Cell 3: HuggingFace Login (for gated models)
