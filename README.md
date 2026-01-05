@@ -20,7 +20,7 @@ TuneKit turns your data into a fine-tuned model with zero infrastructure headach
 Upload Data → Choose Model → Get Notebook → Run in Colab → Done
 ```
 
-1. **Upload** your conversation data (JSON/JSONL)
+1. **Upload** your conversation data (JSONL)
 2. **Select** from Llama, Phi, Gemma, Qwen, or Mistral
 3. **Download** a pre-configured Colab notebook
 4. **Run** on Google's free T4 GPU
