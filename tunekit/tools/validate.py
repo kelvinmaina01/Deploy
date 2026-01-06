@@ -125,23 +125,6 @@ def validate_quality(state: "TuneKitState") -> dict:
     # --- Finalize ---
     score = max(0.0, min(1.0, score))
     
-    if score >= 0.8:
-        level = "excellent"
-        emoji = "✅"
-    elif score >= 0.6:
-        level = "acceptable"
-        emoji = "👍"
-    else:
-        level = "needs improvement"
-        emoji = "⚠️"
-    
-    print(f"\n{emoji} Quality Score: {score:.2f} ({level})")
-    if issues:
-        for issue in issues:
-            print(f"   {issue}")
-    else:
-        print("   ✅ Data looks good!")
-    
     return {
         "quality_score": score,
         "quality_issues": issues if issues else ["✅ Data looks good!"]

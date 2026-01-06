@@ -857,24 +857,6 @@ def generate_package(state: "TuneKitState") -> dict:
     with open(readme_path, "w") as f:
         f.write(_generate_readme(state))
     
-    print(f"\n{'='*60}")
-    print("🚀 TUNEKIT TRAINING PACKAGE GENERATED")
-    print(f"{'='*60}")
-    print(f"📁 Location: {package_path}/")
-    print(f"\n📦 Files created:")
-    print(f"   data.jsonl       → Your training dataset")
-    print(f"   config.json      → Training configuration")
-    print(f"   train.py         → Unsloth LoRA training script")
-    print(f"   eval.py          → Evaluation + interactive mode")
-    print(f"   export.py        → Export to GGUF, 16-bit, 4-bit")
-    print(f"   requirements.txt → Python dependencies")
-    print(f"   README.md        → Documentation")
-    print(f"\n🏃 To train:")
-    print(f"   cd {package_path}")
-    print(f"   pip install -r requirements.txt")
-    print(f"   python train.py")
-    print(f"{'='*60}")
-    
     return {
         "package_path": package_path,
     }
