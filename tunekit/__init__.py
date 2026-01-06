@@ -16,20 +16,16 @@ from .tools import (
     validate_quality,
     analyze_dataset,
     recommend_model,
-    get_training_config,
     generate_package,
 )
 
 __version__ = "0.1.0"
 
 __all__ = [
-    # State
     "TuneKitState",
-    # Tools
     "ingest_data",
     "validate_quality",
     "analyze_dataset",
     "recommend_model",
-    "get_training_config",
     "generate_package",
 ]
