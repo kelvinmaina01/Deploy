@@ -5,9 +5,6 @@ Load JSONL files with chat format validation.
 
 Expected format:
 {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
-
-Each line = one training example
-Optional "system" role for instructions
 """
 
 import json
@@ -17,11 +14,7 @@ from typing import TYPE_CHECKING, List, Dict, Any, Tuple
 if TYPE_CHECKING:
     from tunekit.state import TuneKitState
 
-
-# Valid roles in chat format
 VALID_ROLES = {"system", "user", "assistant"}
-
-# Minimum examples required for fine-tuning
 MIN_EXAMPLES = 50
 
 
@@ -30,24 +23,20 @@ def _validate_message(message: Any, line_num: int, msg_idx: int) -> Tuple[bool, 
     if not isinstance(message, dict):
         return False, f"Line {line_num}, message {msg_idx}: must be an object, got {type(message).__name__}"
     
-    # Check for required fields
     if "role" not in message:
         return False, f"Line {line_num}, message {msg_idx}: missing 'role' field"
     
     if "content" not in message:
         return False, f"Line {line_num}, message {msg_idx}: missing 'content' field"
     
-    # Validate role
     role = message["role"]
     if role not in VALID_ROLES:
         return False, f"Line {line_num}, message {msg_idx}: invalid role '{role}'. Must be: system, user, or assistant"
     
-    # Validate content is string
     content = message["content"]
     if not isinstance(content, str):
         return False, f"Line {line_num}, message {msg_idx}: 'content' must be a string"
     
-    # Check content is not empty
     if not content.strip():
         return False, f"Line {line_num}, message {msg_idx}: 'content' cannot be empty"
     
@@ -59,7 +48,6 @@ def _validate_conversation(entry: Any, line_num: int) -> Tuple[bool, str]:
     if not isinstance(entry, dict):
         return False, f"Line {line_num}: must be a JSON object, got {type(entry).__name__}"
     
-    # Check for messages array
     if "messages" not in entry:
         return False, f"Line {line_num}: missing 'messages' array"
     
@@ -71,13 +59,11 @@ def _validate_conversation(entry: Any, line_num: int) -> Tuple[bool, str]:
     if len(messages) < 2:
         return False, f"Line {line_num}: need at least 2 messages (user + assistant)"
     
-    # Validate each message
     for i, msg in enumerate(messages):
         valid, error = _validate_message(msg, line_num, i + 1)
         if not valid:
             return False, error
     
-    # Check conversation has at least one user and one assistant message
     roles = {msg["role"] for msg in messages}
     if "user" not in roles:
         return False, f"Line {line_num}: conversation must have at least one 'user' message"
@@ -119,8 +105,6 @@ def ingest_data(state: "TuneKitState") -> dict:
             return err(f"File not found: {file_path}")
         
         ext = path.suffix.lower()
-        
-        # Only accept JSONL
         if ext != ".jsonl":
             return err(f"Unsupported format: {ext}. Please upload a .jsonl file.")
         
@@ -137,7 +121,7 @@ def ingest_data(state: "TuneKitState") -> dict:
         if content is None:
             return err("Unable to read file. Please save as UTF-8.")
         
-        # Parse JSONL
+        # Parse and validate JSONL
         raw_data: List[Dict] = []
         validation_errors: List[str] = []
         
@@ -146,9 +130,8 @@ def ingest_data(state: "TuneKitState") -> dict:
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
             if not line:
-                continue  # Skip empty lines
+                continue
             
-            # Parse JSON
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError as e:
@@ -158,7 +141,6 @@ def ingest_data(state: "TuneKitState") -> dict:
                     break
                 continue
             
-            # Validate conversation structure
             valid, error = _validate_conversation(entry, line_num)
             if not valid:
                 validation_errors.append(error)
@@ -169,12 +151,10 @@ def ingest_data(state: "TuneKitState") -> dict:
             
             raw_data.append(entry)
         
-        # Report validation errors
         if validation_errors:
             error_summary = "\n".join(validation_errors[:5])
             return err(f"Validation failed:\n{error_summary}")
         
-        # Check minimum examples
         num_rows = len(raw_data)
         
         if num_rows == 0:
@@ -183,10 +163,7 @@ def ingest_data(state: "TuneKitState") -> dict:
         if num_rows < MIN_EXAMPLES:
             return err(f"Need at least {MIN_EXAMPLES} examples for fine-tuning. Found only {num_rows}.")
         
-        # =====================================================================
-        # CALCULATE COMPREHENSIVE STATISTICS
-        # =====================================================================
-        
+        # Calculate statistics
         total_messages = 0
         system_count = 0
         user_messages = 0
@@ -202,7 +179,6 @@ def ingest_data(state: "TuneKitState") -> dict:
             messages = entry["messages"]
             total_messages += len(messages)
             
-            # Count by role
             user_count = 0
             asst_count = 0
             conv_chars = 0
@@ -236,7 +212,6 @@ def ingest_data(state: "TuneKitState") -> dict:
         estimated_tokens = total_chars // 4
         avg_tokens_per_example = estimated_tokens // num_rows if num_rows > 0 else 0
         
-        # Response length stats
         avg_user_len = sum(all_user_lengths) // len(all_user_lengths) if all_user_lengths else 0
         avg_assistant_len = sum(all_assistant_lengths) // len(all_assistant_lengths) if all_assistant_lengths else 0
         
@@ -249,36 +224,24 @@ def ingest_data(state: "TuneKitState") -> dict:
         if system_count == 0 and num_rows > 100:
             warnings.append("Consider adding system prompts for better control")
         
-        # Quality assessment
         quality = "excellent" if num_rows >= 500 and avg_assistant_len > 50 else \
                   "good" if num_rows >= 100 else "minimal"
         
         stats = {
-            # Core counts
             "total_examples": num_rows,
+            "total_messages": total_messages,
+            "avg_messages_per_example": round(total_messages / num_rows, 1) if num_rows > 0 else 0,
             "total_tokens": estimated_tokens,
             "avg_tokens_per_example": avg_tokens_per_example,
-            
-            # Structure
             "single_turn_pct": round(100 * single_turn_count / num_rows) if num_rows > 0 else 0,
             "multi_turn_pct": round(100 * multi_turn_count / num_rows) if num_rows > 0 else 0,
             "has_system_prompts": system_count > 0,
             "system_prompt_pct": round(100 * system_count / num_rows) if num_rows > 0 else 0,
-            
-            # Content
             "avg_input_chars": avg_user_len,
             "avg_output_chars": avg_assistant_len,
-            
-            # Quality
             "quality": quality,
             "warnings": warnings,
         }
-        
-        print(f"✅ Loaded {num_rows} conversations ({estimated_tokens:,} tokens)")
-        print(f"📊 {stats['single_turn_pct']}% single-turn, {stats['multi_turn_pct']}% multi-turn")
-        if warnings:
-            for w in warnings:
-                print(f"   ⚠️ {w}")
         
         return {
             "raw_data": raw_data,
