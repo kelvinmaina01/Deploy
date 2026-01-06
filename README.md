@@ -77,7 +77,7 @@ No local GPU. No dependencies. No cost (uses Google's free T4).
 </tr>
 </table>
 
-**Powered by [Unsloth](https://github.com/unslothai/unsloth)** — 2x faster training, 70% less VRAM.
+**Powered by [Unsloth](https://github.com/unslothai/unsloth)** - 2x faster training, 70% less VRAM.
 
 ---
 
@@ -151,7 +151,7 @@ Contributions are welcome! Feel free to:
 
 ## License
 
-MIT License — use it for anything.
+MIT License - use it for anything.
 
 ---
 
