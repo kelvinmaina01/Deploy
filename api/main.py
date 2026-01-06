@@ -13,7 +13,6 @@ import requests
 from datetime import datetime
 from typing import Optional
 
-# Load environment variables from .env file
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -23,7 +22,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tunekit import (
@@ -49,8 +47,6 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS for frontend
-# In production, set ALLOWED_ORIGINS environment variable
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000")
 allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 app.add_middleware(
@@ -61,14 +57,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Store sessions in memory (use Redis in production)
 sessions: dict[str, dict] = {}
-
-# Upload directory
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# Persistent package mapping (survives server restarts)
 PACKAGE_MAPPING_FILE = "output/.package_mapping.json"
 
 def save_package_mapping(session_id: str, package_path: str):
@@ -89,7 +80,6 @@ def load_package_mapping() -> dict:
             return {}
     return {}
 
-# Serve static files (frontend)
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -208,7 +198,6 @@ def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipyn
             owner = data["owner"]["login"]
             gist_url = data["html_url"]
 
-            # Colab can open gists directly
             colab_url = f"https://colab.research.google.com/gist/{owner}/{gist_id}/{filename}"
 
             return {
@@ -218,11 +207,9 @@ def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipyn
             }
         else:
             error_msg = response.json().get("message", "Unknown error")
-            print(f"[Gist] Failed to create gist: {response.status_code} - {error_msg}")
             return {"error": f"GitHub API error: {error_msg}"}
 
     except Exception as e:
-        print(f"[Gist] Exception: {e}")
         return {"error": str(e)}
 
 
@@ -287,18 +274,12 @@ async def health():
 
 @app.post("/upload", response_model=SessionResponse)
 async def upload_file(file: UploadFile = File(...)):
-    """
-    Upload a dataset file (CSV, JSON, JSONL).
-    Returns a session_id for subsequent requests.
-    """
-    # Validate file type
+    """Upload a dataset file and return a session_id for subsequent requests."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     
-    # Security: Sanitize filename to prevent path traversal
     from pathlib import Path
-    filename = os.path.basename(file.filename)  # Remove any path components
-    # Only allow alphanumeric, dots, dashes, underscores
+    filename = os.path.basename(file.filename)
     filename = "".join(c for c in filename if c.isalnum() or c in "._-")
     if not filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -307,16 +288,10 @@ async def upload_file(file: UploadFile = File(...)):
     if ext != ".jsonl":
         raise HTTPException(status_code=400, detail="Only JSONL format is supported. Please upload a .jsonl file.")
     
-    # File size limit (100MB)
     MAX_FILE_SIZE = 100 * 1024 * 1024
-    
-    # Create session
     session_id = str(uuid.uuid4())[:8]
-    
-    # Save file
     file_path = os.path.join(UPLOAD_DIR, f"{session_id}_{filename}")
     
-    # Ensure path is within UPLOAD_DIR (prevent path traversal)
     resolved_path = Path(file_path).resolve()
     resolved_upload_dir = Path(UPLOAD_DIR).resolve()
     try:
@@ -324,7 +299,6 @@ async def upload_file(file: UploadFile = File(...)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid file path")
     
-    # Read and validate size
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB")
@@ -332,52 +306,35 @@ async def upload_file(file: UploadFile = File(...)):
     with open(file_path, "wb") as f:
         f.write(content)
     
-    # Initialize session
     sessions[session_id] = {
         "file_path": file_path,
         "filename": file.filename,
-        "original_filename": file.filename,  # Store original for download
+        "original_filename": file.filename,
         "state": None,
         "created_at": datetime.now().isoformat(),
     }
     
-    # Run initial ingestion to validate format and get stats
     try:
         state = create_empty_state(file_path, "")
         result = ingest_data(state)
         state.update(result)
         
-        print(f"[Upload] Ingest result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
-        print(f"[Upload] State num_rows: {state.get('num_rows')}")
-        print(f"[Upload] State stats: {state.get('stats')}")
-        
         if state.get("error_msg"):
-            # Clean up file on error
             if os.path.exists(file_path):
                 os.remove(file_path)
             del sessions[session_id]
             raise HTTPException(status_code=400, detail=state["error_msg"])
         
-        # Store state with ingestion results
         sessions[session_id]["state"] = state
         
-        # Get number of rows/examples - check both num_rows and stats
         num_rows = state.get("num_rows")
         stats = state.get("stats", {})
         
-        print(f"[Upload] After state update - num_rows: {num_rows}, type: {type(num_rows)}")
-        print(f"[Upload] Stats total_examples: {stats.get('total_examples') if stats else 'no stats'}")
-        
-        # If num_rows is None or 0, try to get from stats
         if not num_rows or num_rows == 0:
             if stats and stats.get("total_examples"):
                 num_rows = stats.get("total_examples")
-                print(f"[Upload] Using total_examples from stats: {num_rows}")
         
-        # Ensure it's an integer
         num_rows = int(num_rows) if num_rows else 0
-        
-        print(f"[Upload] Final num_rows: {num_rows} for session {session_id}")
         
         return {
             "session_id": session_id,
@@ -389,7 +346,6 @@ async def upload_file(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        # Clean up on error
         if os.path.exists(file_path):
             os.remove(file_path)
         if session_id in sessions:
@@ -399,11 +355,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/recommend")
 async def recommend(request: RecommendRequest):
-    """
-    Analyze dataset and recommend the best model based on user task and deployment target.
-    
-    Flow: Upload → Recommend (validate + analyze + recommend)
-    """
+    """Analyze dataset and recommend the best model based on user task and deployment target."""
     session_id = request.session_id
     
     if session_id not in sessions:
@@ -415,17 +367,14 @@ async def recommend(request: RecommendRequest):
     if not state:
         raise HTTPException(status_code=400, detail="No data found. Please re-upload your file.")
     
-    # Step 1: Validate quality (if not already done)
     if state.get("quality_score") is None:
         result = validate_quality(state)
         state.update(result)
     
-    # Step 2: Analyze dataset (if not already done)
     if state.get("conversation_characteristics") is None:
         result = analyze_dataset(state)
         state.update(result)
     
-    # Step 3: Get model recommendation
     conversation_chars = state.get("conversation_characteristics", {})
     num_examples = state.get("num_rows", 0)
     
@@ -436,12 +385,9 @@ async def recommend(request: RecommendRequest):
         deployment_target=request.deployment_target
     )
     
-    # Store user selections in state
     state["user_task"] = request.user_task
     state["deployment_target"] = request.deployment_target
     state["recommendation"] = recommendation
-    
-    # Save updated state
     sessions[session_id]["state"] = state
     
     return {
@@ -463,9 +409,7 @@ class AddSystemPromptRequest(BaseModel):
 
 @app.post("/add-system-prompt")
 async def add_system_prompt(request: AddSystemPromptRequest):
-    """
-    Add a system prompt to all conversations in the dataset.
-    """
+    """Add a system prompt to all conversations in the dataset."""
     session_id = request.session_id
     system_prompt = request.system_prompt.strip()
     
@@ -484,22 +428,17 @@ async def add_system_prompt(request: AddSystemPromptRequest):
     raw_data = state["raw_data"]
     modified_count = 0
     
-    # Add system prompt to each conversation
     for entry in raw_data:
         messages = entry.get("messages", [])
-        
-        # Check if already has a system prompt
         has_system = any(msg.get("role") == "system" for msg in messages)
         
         if not has_system:
-            # Insert system prompt at the beginning
             messages.insert(0, {
                 "role": "system",
                 "content": system_prompt
             })
             modified_count += 1
     
-    # Save modified data back to file
     file_path = session["file_path"]
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -508,7 +447,6 @@ async def add_system_prompt(request: AddSystemPromptRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save modified data: {str(e)}")
     
-    # Re-run ingestion to update stats
     state["file_path"] = file_path
     result = ingest_data(state)
     state.update(result)
@@ -529,9 +467,7 @@ async def add_system_prompt(request: AddSystemPromptRequest):
 
 @app.get("/download-dataset/{session_id}")
 async def download_dataset(session_id: str):
-    """
-    Download the dataset file (with any modifications like system prompts).
-    """
+    """Download the dataset file (with any modifications like system prompts)."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -541,12 +477,10 @@ async def download_dataset(session_id: str):
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
-    # Get original filename or generate one
     original_filename = session.get("original_filename", "dataset.jsonl")
     if not original_filename.endswith('.jsonl'):
         original_filename = original_filename.rsplit('.', 1)[0] + '.jsonl'
     
-    # Add suffix if modified
     if session.get("state", {}).get("stats", {}).get("has_system_prompts"):
         name, ext = os.path.splitext(original_filename)
         original_filename = f"{name}_with_system_prompt{ext}"
@@ -580,15 +514,12 @@ async def analyze(request: AnalyzeRequest):
     if state.get("error_msg"):
         raise HTTPException(status_code=400, detail=state["error_msg"])
     
-    # Step 2: Validate
     result = validate_quality(state)
     state.update(result)
     
-    # Step 3: Analyze
     result = analyze_dataset(state)
     state.update(result)
     
-    # Save state to session
     sessions[session_id]["state"] = state
     
     return {
@@ -603,22 +534,12 @@ async def analyze(request: AnalyzeRequest):
 
 @app.get("/sample-data/{session_id}")
 async def get_sample_data(session_id: str, limit: int = 100):
-    """
-    Get sample rows from the uploaded dataset.
-    
-    Args:
-        session_id: Session identifier
-        limit: Maximum number of rows to return (default: 100)
-    
-    Returns:
-        List of sample rows
-    """
+    """Get sample rows from the uploaded dataset."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
     session = sessions[session_id]
     
-    # If we have state with raw_data, use it
     if session.get("state") and session["state"].get("raw_data"):
         raw_data = session["state"]["raw_data"]
         return {
@@ -627,7 +548,6 @@ async def get_sample_data(session_id: str, limit: int = 100):
             "returned_rows": min(limit, len(raw_data))
         }
     
-    # Otherwise, try to read from file
     file_path = session["file_path"]
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
@@ -636,7 +556,6 @@ async def get_sample_data(session_id: str, limit: int = 100):
         from tunekit.tools.ingest import ingest_data
         from tunekit.state import create_empty_state
         
-        # Quick ingest to get data
         state = create_empty_state(file_path, "")
         result = ingest_data(state)
         state.update(result)
@@ -656,10 +575,7 @@ async def get_sample_data(session_id: str, limit: int = 100):
 
 @app.post("/plan")
 async def plan(request: PlanRequest):
-    """
-    Create training plan based on recommendation.
-    Uses the model from the recommendation step.
-    """
+    """Create training plan based on recommendation."""
     session_id = request.session_id
     
     if session_id not in sessions:
@@ -671,32 +587,25 @@ async def plan(request: PlanRequest):
     if not state:
         raise HTTPException(status_code=400, detail="Run /recommend first")
     
-    # Get recommendation from state
     recommendation = state.get("recommendation", {})
     primary_rec = recommendation.get("primary_recommendation", {})
     
     if not primary_rec:
         raise HTTPException(status_code=400, detail="No recommendation found. Run /recommend first.")
     
-    # Apply user task and deployment target if provided
     user_task = request.user_task or state.get("user_task", "conversation")
     deployment_target = request.deployment_target or state.get("deployment_target", "not_sure")
-    
-    # Check if user selected an alternative model
     selected_model_id = request.selected_model_id
     selected_model_name = primary_rec.get('model_name', 'Phi-4 Mini')
     
     if selected_model_id:
-        # User chose an alternative model
         model_id = selected_model_id
-        # Try to find the model name from alternatives
         alternatives = recommendation.get("alternatives", [])
         for alt in alternatives:
             if alt.get("model_id") == selected_model_id:
                 selected_model_name = alt.get("model_name", selected_model_id)
                 break
     else:
-        # Use the primary recommendation
         model_id = primary_rec.get("model_id", "microsoft/Phi-4-mini-instruct")
     
     state["final_task_type"] = user_task
@@ -704,8 +613,6 @@ async def plan(request: PlanRequest):
     state["model_name"] = selected_model_name
     state["planning_reasoning"] = f"Based on your {user_task} task and {deployment_target} deployment target, we recommend {selected_model_name}."
     
-    # Create training config for chat-based fine-tuning with LoRA
-    # Note: lora_config is set in package.py with model-specific target_modules
     state["training_config"] = {
         "model_name": model_id,
         "task_type": "chat",
@@ -719,12 +626,8 @@ async def plan(request: PlanRequest):
             "save_strategy": "epoch",
             "warmup_ratio": 0.1,
         },
-        # lora_config is generated in package.py based on model architecture:
-        # - Phi models: q_proj, k_proj, v_proj, o_proj, fc1, fc2
-        # - Llama/Mistral/Gemma/Qwen: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj
     }
     
-    # Save updated state
     sessions[session_id]["state"] = state
     
     return {
@@ -738,9 +641,7 @@ async def plan(request: PlanRequest):
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest):
-    """
-    Generate the training package (5 files).
-    """
+    """Generate the training package."""
     session_id = request.session_id
     
     if session_id not in sessions:
@@ -752,16 +653,11 @@ async def generate(request: GenerateRequest):
     if not state or not state.get("final_task_type"):
         raise HTTPException(status_code=400, detail="Run /plan first")
     
-    # Generate package
     result = generate_package(state)
     state.update(result)
-    
-    # Save updated state
     sessions[session_id]["state"] = state
     
     package_path = state["package_path"]
-    
-    # Save to persistent mapping (survives server restarts)
     save_package_mapping(session_id, package_path)
     
     return GenerateResponse(
@@ -773,20 +669,15 @@ async def generate(request: GenerateRequest):
 
 @app.get("/download/{session_id}")
 async def download(session_id: str):
-    """
-    Download the generated training package as a ZIP file.
-    Works even after server restart using persistent mapping.
-    """
+    """Download the generated training package as a ZIP file."""
     package_path = None
     
-    # Try to get package path from session first
     if session_id in sessions:
         session = sessions[session_id]
         state = session.get("state")
         if state:
             package_path = state.get("package_path")
     
-    # Fallback: check persistent mapping (for after server restart)
     if not package_path:
         mapping = load_package_mapping()
         package_path = mapping.get(session_id)
@@ -797,7 +688,6 @@ async def download(session_id: str):
     if not os.path.exists(package_path):
         raise HTTPException(status_code=404, detail="Package folder not found on disk")
     
-    # Create ZIP file
     zip_path = f"{package_path}.zip"
     if not os.path.exists(zip_path):
         shutil.make_archive(package_path, "zip", package_path)
@@ -811,9 +701,7 @@ async def download(session_id: str):
 
 @app.get("/session/{session_id}")
 async def get_session(session_id: str):
-    """
-    Get the current state of a session.
-    """
+    """Get the current state of a session."""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -854,11 +742,7 @@ def _get_current_step(state: dict) -> str:
 
 @app.post("/generate-colab", response_model=ColabResponse)
 async def generate_colab_notebook(request: ColabRequest):
-    """
-    Generate a Google Colab notebook for training.
-    
-    Requires: /plan to be completed first (to set model and config)
-    """
+    """Generate a Google Colab notebook for training. Requires /plan to be completed first."""
     session_id = request.session_id
     
     if session_id not in sessions:
@@ -871,7 +755,6 @@ async def generate_colab_notebook(request: ColabRequest):
         raise HTTPException(status_code=400, detail="Run /plan first to configure training")
     
     try:
-        # Read the dataset
         data_path = state.get("file_path")
         if not data_path or not os.path.exists(data_path):
             raise HTTPException(status_code=404, detail="Dataset file not found")
@@ -879,18 +762,15 @@ async def generate_colab_notebook(request: ColabRequest):
         with open(data_path, "r") as f:
             dataset_jsonl = f.read()
         
-        # Get model info
         model_id = state["training_config"].get("model_name", "microsoft/Phi-4-mini-instruct")
         model_name = state.get("model_name", "Phi-4 Mini")
         
-        # Build analysis dict
         analysis = {
             "num_examples": state.get("num_rows", 0),
             "task_type": state.get("final_task_type", "chat"),
             "model_size": state.get("model_size", "3B"),
         }
         
-        # Generate notebook
         notebook_content = generate_training_notebook(
             dataset_jsonl=dataset_jsonl,
             model_id=model_id,
@@ -898,28 +778,17 @@ async def generate_colab_notebook(request: ColabRequest):
             analysis=analysis,
         )
         
-        # Save notebook
         output_dir = "output"
         os.makedirs(output_dir, exist_ok=True)
         notebook_filename = f"tunekit_train_{session_id[:8]}.ipynb"
         notebook_path = os.path.join(output_dir, notebook_filename)
         
         save_notebook(notebook_content, notebook_path)
-
-        # Save mapping for download
         save_package_mapping(session_id, notebook_path)
-
-        # Upload to GitHub Gist for direct Colab access
         gist_result = upload_to_gist(notebook_content, notebook_filename)
 
         colab_url = gist_result.get("colab_url")
         gist_url = gist_result.get("gist_url")
-
-        if colab_url:
-            print(f"[API] Notebook uploaded to Gist: {gist_url}")
-            print(f"[API] Colab URL: {colab_url}")
-        else:
-            print(f"[API] Gist upload failed: {gist_result.get('error')}")
 
         return ColabResponse(
             session_id=session_id,
@@ -931,26 +800,18 @@ async def generate_colab_notebook(request: ColabRequest):
         )
         
     except Exception as e:
-        import traceback
-        print(f"[API] Error generating notebook: {e}")
-        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to generate notebook: {str(e)}")
 
 
 @app.get("/download-notebook/{session_id}")
 async def download_notebook(session_id: str):
-    """
-    Download the generated Colab notebook.
-    """
-    # Check persistent mapping first
+    """Download the generated Colab notebook."""
     mapping = load_package_mapping()
     notebook_path = mapping.get(session_id)
     
-    if not notebook_path:
-        # Try to find in session
-        if session_id in sessions:
-            state = sessions[session_id].get("state", {})
-            notebook_path = state.get("notebook_path")
+    if not notebook_path and session_id in sessions:
+        state = sessions[session_id].get("state", {})
+        notebook_path = state.get("notebook_path")
     
     if not notebook_path or not os.path.exists(notebook_path):
         raise HTTPException(status_code=404, detail="Notebook not found. Please generate it first.")
@@ -969,4 +830,3 @@ async def download_notebook(session_id: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
