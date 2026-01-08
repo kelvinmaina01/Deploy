@@ -12,6 +12,12 @@
 
 [**Try it now**](https://tunekit.app) · [Report Bug](https://github.com/riyanshibohra/TuneKit/issues) · [Request Feature](https://github.com/riyanshibohra/TuneKit/issues)
 
+<br>
+
+<video src="https://github.com/user-attachments/assets/784582a7-0fe6-45b3-a260-24053c0459cc" controls autoplay muted loop></video>
+
+*See it in action*
+
 </div>
 
 ---
