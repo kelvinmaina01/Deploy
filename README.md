@@ -14,7 +14,7 @@
 
 <br>
 
-<video src="https://github.com/user-attachments/assets/784582a7-0fe6-45b3-a260-24053c0459cc" controls autoplay muted loop></video>
+<video src="https://github.com/user-attachments/assets/ce06d4bc-7a74-4eef-8862-27d0f74aef00" controls autoplay muted loop></video>
 
 *See it in action*
 
