@@ -12,6 +12,8 @@
 
 [**Try it now**](https://tunekit.app) · [Report Bug](https://github.com/riyanshibohra/TuneKit/issues) · [Request Feature](https://github.com/riyanshibohra/TuneKit/issues)
 
+P.S. TuneKit is trending #19 on Product Hunt - check it out!
+
 <a href="https://www.producthunt.com/products/tunekit?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tunekit" target="_blank" rel="noopener noreferrer"><img alt="TuneKit - Fine-tune SLMs 2x faster, for free | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1060367&amp;theme=neutral&amp;t=1767990261002"></a>
 <br>
 
