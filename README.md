@@ -12,10 +12,7 @@
 
 [**Try it now**](https://tunekit.app) · [Report Bug](https://github.com/riyanshibohra/TuneKit/issues) · [Request Feature](https://github.com/riyanshibohra/TuneKit/issues)
 
-P.S. TuneKit is trending #19 on Product Hunt - check it out!
-
-<a href="https://www.producthunt.com/products/tunekit?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tunekit" target="_blank" rel="noopener noreferrer"><img alt="TuneKit - Fine-tune SLMs 2x faster, for free | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1060367&amp;theme=light&amp;t=1767995126904"></a>
-<br>
+P.S. TuneKit trending #19 on Product Hunt with 88 followers, 50+ Upvotes (Day of Launch) - [check it out](https://www.producthunt.com/products/tunekit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tunekit)!
 
 <video src="https://github.com/user-attachments/assets/ce06d4bc-7a74-4eef-8862-27d0f74aef00" controls autoplay muted loop></video>
 
