@@ -12,7 +12,7 @@
 
 [**Try it now**](https://tunekit.app) · [Report Bug](https://github.com/riyanshibohra/TuneKit/issues) · [Request Feature](https://github.com/riyanshibohra/TuneKit/issues)
 
-P.S. TuneKit trending #19 on Product Hunt with 88 followers, 50+ Upvotes (Day of Launch) - [check it out](https://www.producthunt.com/products/tunekit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tunekit)!
+P.S. TuneKit trending at **#19** on Product Hunt (Day of Launch) with 88 followers & 50+ Upvotes - [check it out](https://www.producthunt.com/products/tunekit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tunekit)!
 
 <video src="https://github.com/user-attachments/assets/ce06d4bc-7a74-4eef-8862-27d0f74aef00" controls autoplay muted loop></video>
 
