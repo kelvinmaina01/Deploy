@@ -1,8 +1,4 @@
-langgraph
-pandas
-langchain-openai
 python-dotenv
-datasets
 fastapi
 uvicorn[standard]
 python-multipart

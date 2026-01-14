@@ -62,6 +62,84 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 PACKAGE_MAPPING_FILE = "output/.package_mapping.json"
 
+# Session management for memory efficiency
+MAX_SESSIONS = 50  # Maximum concurrent sessions
+SESSION_EXPIRY_HOURS = 2  # Sessions expire after this time
+
+
+def cleanup_expired_sessions():
+    """Remove expired sessions to free memory."""
+    if not sessions:
+        return
+    
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    expired = []
+    
+    for session_id, session in sessions.items():
+        created_str = session.get("created_at", "")
+        try:
+            created = datetime.fromisoformat(created_str)
+            if now - created > timedelta(hours=SESSION_EXPIRY_HOURS):
+                expired.append(session_id)
+        except (ValueError, TypeError):
+            pass
+    
+    for session_id in expired:
+        # Clean up uploaded file
+        file_path = sessions[session_id].get("file_path")
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        del sessions[session_id]
+
+
+def enforce_session_limit():
+    """Remove oldest sessions if we exceed the limit."""
+    cleanup_expired_sessions()
+    
+    if len(sessions) >= MAX_SESSIONS:
+        # Sort by creation time and remove oldest
+        sorted_sessions = sorted(
+            sessions.items(),
+            key=lambda x: x[1].get("created_at", "")
+        )
+        # Remove oldest 10 sessions
+        for session_id, session in sorted_sessions[:10]:
+            file_path = session.get("file_path")
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+            del sessions[session_id]
+
+
+def reload_raw_data_if_needed(session: dict) -> bool:
+    """Reload raw_data from file if it's None. Returns True if successful."""
+    state = session.get("state")
+    if not state:
+        return False
+    
+    if state.get("raw_data") is not None:
+        return True  # Already loaded
+    
+    file_path = session.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        return False
+    
+    # Re-ingest the data
+    temp_state = create_empty_state(file_path, "")
+    result = ingest_data(temp_state)
+    
+    if result.get("error_msg"):
+        return False
+    
+    state["raw_data"] = result.get("raw_data")
+    return True
+
 def save_package_mapping(session_id: str, package_path: str):
     """Save session_id -> package_path mapping to persistent file."""
     os.makedirs("output", exist_ok=True)
@@ -275,6 +353,9 @@ async def health():
 @app.post("/upload", response_model=SessionResponse)
 async def upload_file(file: UploadFile = File(...)):
     """Upload a dataset file and return a session_id for subsequent requests."""
+    # Enforce session limits to prevent memory exhaustion
+    enforce_session_limit()
+    
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     
@@ -325,8 +406,6 @@ async def upload_file(file: UploadFile = File(...)):
             del sessions[session_id]
             raise HTTPException(status_code=400, detail=state["error_msg"])
         
-        sessions[session_id]["state"] = state
-        
         num_rows = state.get("num_rows")
         stats = state.get("stats", {})
         
@@ -335,6 +414,11 @@ async def upload_file(file: UploadFile = File(...)):
                 num_rows = stats.get("total_examples")
         
         num_rows = int(num_rows) if num_rows else 0
+        
+        # Memory optimization: clear raw_data after computing stats
+        # We can reload from file when needed
+        state["raw_data"] = None
+        sessions[session_id]["state"] = state
         
         return {
             "session_id": session_id,
@@ -367,6 +451,10 @@ async def recommend(request: RecommendRequest):
     if not state:
         raise HTTPException(status_code=400, detail="No data found. Please re-upload your file.")
     
+    # Reload raw_data from file if needed (memory optimization)
+    if not reload_raw_data_if_needed(session):
+        raise HTTPException(status_code=400, detail="Could not load data. Please re-upload your file.")
+    
     if state.get("quality_score") is None:
         result = validate_quality(state)
         state.update(result)
@@ -388,6 +476,9 @@ async def recommend(request: RecommendRequest):
     state["user_task"] = request.user_task
     state["deployment_target"] = request.deployment_target
     state["recommendation"] = recommendation
+    
+    # Clear raw_data after use to save memory
+    state["raw_data"] = None
     sessions[session_id]["state"] = state
     
     return {
@@ -422,8 +513,12 @@ async def add_system_prompt(request: AddSystemPromptRequest):
     session = sessions[session_id]
     state = session.get("state")
     
-    if not state or not state.get("raw_data"):
+    if not state:
         raise HTTPException(status_code=400, detail="No data found. Please re-upload your file.")
+    
+    # Reload raw_data from file if needed (memory optimization)
+    if not reload_raw_data_if_needed(session):
+        raise HTTPException(status_code=400, detail="Could not load data. Please re-upload your file.")
     
     raw_data = state["raw_data"]
     modified_count = 0
@@ -454,6 +549,8 @@ async def add_system_prompt(request: AddSystemPromptRequest):
     if state.get("error_msg"):
         raise HTTPException(status_code=400, detail=state["error_msg"])
     
+    # Clear raw_data after use to save memory
+    state["raw_data"] = None
     sessions[session_id]["state"] = state
     
     return {
@@ -540,37 +637,21 @@ async def get_sample_data(session_id: str, limit: int = 100):
     
     session = sessions[session_id]
     
-    if session.get("state") and session["state"].get("raw_data"):
-        raw_data = session["state"]["raw_data"]
-        return {
-            "rows": raw_data[:limit],
-            "total_rows": len(raw_data),
-            "returned_rows": min(limit, len(raw_data))
-        }
+    # Reload raw_data from file if needed (memory optimization)
+    if not reload_raw_data_if_needed(session):
+        raise HTTPException(status_code=400, detail="Could not load data. Please re-upload your file.")
     
-    file_path = session["file_path"]
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
+    raw_data = session["state"]["raw_data"]
+    result = {
+        "rows": raw_data[:limit],
+        "total_rows": len(raw_data),
+        "returned_rows": min(limit, len(raw_data))
+    }
     
-    try:
-        from tunekit.tools.ingest import ingest_data
-        from tunekit.state import create_empty_state
-        
-        state = create_empty_state(file_path, "")
-        result = ingest_data(state)
-        state.update(result)
-        
-        if state.get("raw_data"):
-            raw_data = state["raw_data"]
-            return {
-                "rows": raw_data[:limit],
-                "total_rows": len(raw_data),
-                "returned_rows": min(limit, len(raw_data))
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Could not read file data")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading data: {str(e)}")
+    # Clear raw_data after use to save memory
+    session["state"]["raw_data"] = None
+    
+    return result
 
 
 @app.post("/plan")
