@@ -62,9 +62,9 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 PACKAGE_MAPPING_FILE = "output/.package_mapping.json"
 
-# Session management for memory efficiency
-MAX_SESSIONS = 50  # Maximum concurrent sessions
-SESSION_EXPIRY_HOURS = 2  # Sessions expire after this time
+# Session management for memory efficiency (tuned for 1GB RAM)
+MAX_SESSIONS = 25  # Maximum concurrent sessions
+SESSION_EXPIRY_MINUTES = 30  # Sessions expire after 30 minutes
 
 
 def cleanup_expired_sessions():
@@ -72,6 +72,7 @@ def cleanup_expired_sessions():
     if not sessions:
         return
     
+    import gc
     from datetime import datetime, timedelta
     now = datetime.now()
     expired = []
@@ -80,7 +81,7 @@ def cleanup_expired_sessions():
         created_str = session.get("created_at", "")
         try:
             created = datetime.fromisoformat(created_str)
-            if now - created > timedelta(hours=SESSION_EXPIRY_HOURS):
+            if now - created > timedelta(minutes=SESSION_EXPIRY_MINUTES):
                 expired.append(session_id)
         except (ValueError, TypeError):
             pass
@@ -94,6 +95,10 @@ def cleanup_expired_sessions():
             except OSError:
                 pass
         del sessions[session_id]
+    
+    # Force garbage collection if we cleaned up sessions
+    if expired:
+        gc.collect()
 
 
 def enforce_session_limit():
@@ -160,6 +165,32 @@ def load_package_mapping() -> dict:
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+# ============================================================================
+# STARTUP & MIDDLEWARE
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Clean up any leftover files on startup."""
+    import gc
+    # Clean uploads folder on startup
+    if os.path.exists(UPLOAD_DIR):
+        for f in os.listdir(UPLOAD_DIR):
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, f))
+            except OSError:
+                pass
+    gc.collect()
+
+
+@app.middleware("http")
+async def cleanup_middleware(request, call_next):
+    """Run cleanup on every request to prevent memory buildup."""
+    cleanup_expired_sessions()
+    response = await call_next(request)
+    return response
 
 
 # ============================================================================
@@ -369,7 +400,7 @@ async def upload_file(file: UploadFile = File(...)):
     if ext != ".jsonl":
         raise HTTPException(status_code=400, detail="Only JSONL format is supported. Please upload a .jsonl file.")
     
-    MAX_FILE_SIZE = 100 * 1024 * 1024
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB max
     session_id = str(uuid.uuid4())[:8]
     file_path = os.path.join(UPLOAD_DIR, f"{session_id}_{filename}")
     
