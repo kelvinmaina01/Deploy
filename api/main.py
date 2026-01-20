@@ -1,7 +1,7 @@
 """
-TuneKit API
-===========
-FastAPI backend for the TuneKit pipeline.
+Deploy API
+==========
+FastAPI backend for the Deploy pipeline.
 """
 
 import os
@@ -24,15 +24,15 @@ from pydantic import BaseModel
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tunekit import (
-    TuneKitState,
+from deploy import (
+    DeployState,
     ingest_data,
     validate_quality,
     analyze_dataset,
     generate_package,
     recommend_model,
 )
-from tunekit.training import (
+from deploy.training import (
     generate_training_notebook,
     save_notebook,
 )
@@ -42,7 +42,7 @@ from tunekit.training import (
 # ============================================================================
 
 app = FastAPI(
-    title="TuneKit API",
+    title="Deploy API",
     description="Automated SLM Fine-Tuning Pipeline",
     version="0.1.0",
 )
@@ -163,8 +163,8 @@ def load_package_mapping() -> dict:
             return {}
     return {}
 
-FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
 
 
 # ============================================================================
@@ -270,7 +270,7 @@ class ColabResponse(BaseModel):
     error: Optional[str] = None
 
 
-def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipynb") -> dict:
+def upload_to_gist(notebook_content: str, filename: str = "deploy_training.ipynb") -> dict:
     """
     Upload notebook to GitHub Gist and return URLs.
 
@@ -290,7 +290,7 @@ def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipyn
                 "Accept": "application/vnd.github.v3+json",
             },
             json={
-                "description": "TuneKit Training Notebook - Fine-tune your model on Google Colab",
+                "description": "Deploy Training Notebook - Fine-tune your model on Google Colab",
                 "public": False,  # Secret gist (unlisted but accessible via URL)
                 "files": {
                     filename: {
@@ -326,8 +326,8 @@ def upload_to_gist(notebook_content: str, filename: str = "tunekit_training.ipyn
 # HELPER FUNCTIONS
 # ============================================================================
 
-def create_empty_state(file_path: str, user_description: str = "") -> TuneKitState:
-    """Create an empty TuneKitState."""
+def create_empty_state(file_path: str, user_description: str = "") -> DeployState:
+    """Create an empty DeployState."""
     return {
         "file_path": file_path,
         "user_description": user_description,
@@ -348,18 +348,13 @@ def create_empty_state(file_path: str, user_description: str = "") -> TuneKitSta
 # ============================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    """Serve the landing page."""
-    landing_path = os.path.join(FRONTEND_DIR, "landing.html")
-    with open(landing_path, "r") as f:
-        return f.read()
-
-
 @app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Serve the main dashboard/app."""
+async def serve_react():
+    """Serve the React application."""
     index_path = os.path.join(FRONTEND_DIR, "index.html")
-    with open(index_path, "r") as f:
+    if not os.path.exists(index_path):
+        return HTMLResponse(content="<h1>Frontend build not found</h1><p>Please run 'npm run build' in the /web directory.</p>", status_code=404)
+    with open(index_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
@@ -372,13 +367,19 @@ async def favicon():
     logo_path = os.path.join(FRONTEND_DIR, "logo.png")
     if os.path.exists(logo_path):
         return FileResponse(logo_path, media_type="image/png")
+    
+    # Fallback to public folder if in development or specific structure
+    public_favicon = os.path.join(os.path.dirname(FRONTEND_DIR), "public", "favicon.svg")
+    if os.path.exists(public_favicon):
+        return FileResponse(public_favicon, media_type="image/svg+xml")
+        
     raise HTTPException(status_code=404)
 
 
 @app.get("/health")
 async def health():
     """Health check."""
-    return {"status": "ok", "message": "TuneKit API is running"}
+    return {"status": "ok", "message": "Deploy API is running"}
 
 
 @app.post("/upload", response_model=SessionResponse)
@@ -807,7 +808,7 @@ async def download(session_id: str):
     return FileResponse(
         zip_path,
         media_type="application/zip",
-        filename=f"tunekit_package_{session_id}.zip",
+        filename=f"deploy_package_{session_id}.zip",
     )
 
 
@@ -892,7 +893,7 @@ async def generate_colab_notebook(request: ColabRequest):
         
         output_dir = "output"
         os.makedirs(output_dir, exist_ok=True)
-        notebook_filename = f"tunekit_train_{session_id[:8]}.ipynb"
+        notebook_filename = f"deploy_train_{session_id[:8]}.ipynb"
         notebook_path = os.path.join(output_dir, notebook_filename)
         
         save_notebook(notebook_content, notebook_path)

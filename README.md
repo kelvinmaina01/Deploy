@@ -1,6 +1,6 @@
 <div align="center">
 
-# TuneKit
+# Deploy
 
 ### The fine-tuning workflow you wish existed.
 
@@ -8,11 +8,11 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Powered by Unsloth](https://img.shields.io/badge/Powered%20by-Unsloth-FF6F00.svg)](https://github.com/unslothai/unsloth)
-[![Free to Use](https://img.shields.io/badge/Cost-$0-22c55e.svg)](https://tunekit.app)
+[![Free to Use](https://img.shields.io/badge/Cost-$0-22c55e.svg)](https://deploy.app)
 
-[**Try it now**](https://tunekit.app) · [Report Bug](https://github.com/riyanshibohra/TuneKit/issues) · [Request Feature](https://github.com/riyanshibohra/TuneKit/issues)
+[**Try it now**](https://deploy.app) · [Report Bug](https://github.com/riyanshibohra/Deploy/issues) · [Request Feature](https://github.com/riyanshibohra/Deploy/issues)
 
-P.S. TuneKit trending at **#19** on Product Hunt (Day of Launch) with 88 followers & 50+ Upvotes - [check it out](https://www.producthunt.com/products/tunekit?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tunekit)!
+P.S. Deploy trending at **#19** on Product Hunt (Day of Launch) with 88 followers & 50+ Upvotes - [check it out](https://www.producthunt.com/products/deploy?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-deploy)!
 
 <video src="https://github.com/user-attachments/assets/ce06d4bc-7a74-4eef-8862-27d0f74aef00" controls autoplay muted loop></video>
 
@@ -34,10 +34,10 @@ Fine-tuning LLMs is powerful but painful. You need to:
 
 ## The Solution
 
-TuneKit eliminates all of that. Upload your data, answer two questions, and get a ready-to-run Colab notebook. Click "Run All" and your fine-tuned model is ready in ~15 minutes.
+Deploy eliminates all of that. Upload your data, answer two questions, and get a ready-to-run Colab notebook. Click "Run All" and your fine-tuned model is ready in ~15 minutes.
 
 ```
-Your Data → TuneKit → Colab Notebook → Fine-tuned Model
+Your Data → Deploy → Colab Notebook → Fine-tuned Model
 ```
 
 No local GPU. No dependencies. No cost (uses Google's free T4).
@@ -46,7 +46,7 @@ No local GPU. No dependencies. No cost (uses Google's free T4).
 
 ## How It Works
 
-| Step | What You Do | What TuneKit Does |
+| Step | What You Do | What Deploy Does |
 |:----:|-------------|-------------------|
 | **1** | Upload JSONL file | Validates format, analyzes patterns |
 | **2** | Answer 2 questions | Recommends optimal model + hyperparameters |
@@ -56,13 +56,13 @@ No local GPU. No dependencies. No cost (uses Google's free T4).
 
 ---
 
-## Why TuneKit?
+## Why Deploy?
 
 <table>
 <tr>
 <td width="50%">
 
-### Without TuneKit
+### Without Deploy
 - Hours of environment setup
 - $50-200 in GPU costs
 - Hundreds of lines of code
@@ -72,7 +72,7 @@ No local GPU. No dependencies. No cost (uses Google's free T4).
 </td>
 <td width="50%">
 
-### With TuneKit
+### With Deploy
 - Zero setup
 - $0 (free Colab GPU)
 - Zero code to write
@@ -101,7 +101,7 @@ No local GPU. No dependencies. No cost (uses Google's free T4).
 
 ## Data Format
 
-TuneKit uses the standard conversation format:
+Deploy uses the standard conversation format:
 
 ```jsonl
 {"messages": [{"role": "user", "content": "What's the capital of France?"}, {"role": "assistant", "content": "Paris is the capital of France."}]}
@@ -120,8 +120,8 @@ TuneKit uses the standard conversation format:
 
 ```bash
 # Clone the repo
-git clone https://github.com/riyanshibohra/TuneKit.git
-cd TuneKit
+git clone https://github.com/riyanshibohra/Deploy.git
+cd Deploy
 
 # Install dependencies
 pip install -r requirements.txt
@@ -163,7 +163,7 @@ MIT License - use it for anything.
 
 <div align="center">
 
-**[tunekit.app](https://tunekit.app)**
+**[deploy.app](https://deploy.app)**
 
 Built with lots of caffeine + curiosity.
 
