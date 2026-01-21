@@ -58,9 +58,16 @@ app.add_middleware(
 )
 
 sessions: dict[str, dict] = {}
-UPLOAD_DIR = "uploads"
+IS_VERCEL = "VERCEL" in os.environ
+STORAGE_DIR = "/tmp" if IS_VERCEL else os.getcwd()
+
+UPLOAD_DIR = os.path.join(STORAGE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-PACKAGE_MAPPING_FILE = "output/.package_mapping.json"
+
+OUTPUT_DIR = os.path.join(STORAGE_DIR, "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+PACKAGE_MAPPING_FILE = os.path.join(OUTPUT_DIR, ".package_mapping.json")
 
 # Session management for memory efficiency (tuned for 1GB RAM)
 MAX_SESSIONS = 25  # Maximum concurrent sessions
@@ -147,7 +154,7 @@ def reload_raw_data_if_needed(session: dict) -> bool:
 
 def save_package_mapping(session_id: str, package_path: str):
     """Save session_id -> package_path mapping to persistent file."""
-    os.makedirs("output", exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     mapping = load_package_mapping()
     mapping[session_id] = package_path
     with open(PACKAGE_MAPPING_FILE, "w") as f:
