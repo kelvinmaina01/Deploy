@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Github, Check, Terminal as TerminalIcon } from 'lucide-react';
+import { ArrowRight, Check, Terminal as TerminalIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { useSession } from '../context/SessionContext.tsx';
