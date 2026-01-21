@@ -80,11 +80,16 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const setSelectedDeployment = (target: string | null) => setState(s => ({ ...s, selectedDeployment: target }));
     const toggleTheme = () => setState(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }));
 
-    const login = () => setState(s => ({
-        ...s,
-        isAuthenticated: true,
-        user: { name: 'Alex Researcher', email: 'alex@labiq.ai', avatar: '/avatar-placeholder.png' }
-    }));
+    const login = () => {
+        // Simulate a brief network delay for realism
+        setTimeout(() => {
+            setState(s => ({
+                ...s,
+                isAuthenticated: true,
+                user: { name: 'Alex Researcher', email: 'alex@labiq.ai', avatar: '/avatar-placeholder.png' }
+            }));
+        }, 600);
+    };
 
     const logout = () => setState(s => ({
         ...s,

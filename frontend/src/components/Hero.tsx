@@ -2,7 +2,18 @@ import React from 'react';
 import { ArrowRight, Github, Check, Terminal as TerminalIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { useSession } from '../context/SessionContext.tsx';
+
 const Hero: React.FC = () => {
+    const { isAuthenticated, login } = useSession();
+
+    const handleStartProject = (e: React.MouseEvent) => {
+        if (!isAuthenticated) {
+            e.preventDefault();
+            login();
+        }
+    };
+
     return (
         <section className="hero-centered">
             <div className="hero-content-full">
@@ -28,14 +39,10 @@ const Hero: React.FC = () => {
                 </p>
 
                 <div className="hero-cta-centered">
-                    <Link to="/dashboard" className="btn-premium">
+                    <Link to="/dashboard" className="btn-premium" onClick={handleStartProject}>
                         <span>Start Your Project</span>
                         <ArrowRight size={18} />
                     </Link>
-                    <a href="https://github.com/riyanshibohra/Deploy" className="btn-outline" target="_blank" rel="noopener noreferrer">
-                        <Github size={18} />
-                        <span>Star on GitHub</span>
-                    </a>
                 </div>
             </div>
 

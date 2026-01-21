@@ -5,7 +5,7 @@ const Logo: React.FC = () => {
     return (
         <Link to="/" className="logo-group">
             <img src="/logo.png" alt="Deploy" className="logo-image-large" />
-            <span className="logo-brand-text">Deploy</span>
+            <span className="logo-brand-text-sm">Deploy</span>
         </Link>
     );
 };
