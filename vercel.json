@@ -23,6 +23,22 @@
             "dest": "/frontend/assets/$1"
         },
         {
+            "src": "/logo.png",
+            "dest": "/frontend/logo.png"
+        },
+        {
+            "src": "/manifest.json",
+            "dest": "/frontend/manifest.json"
+        },
+        {
+            "src": "/sw.js",
+            "dest": "/frontend/sw.js"
+        },
+        {
+            "src": "/favicon.svg",
+            "dest": "/frontend/favicon.svg"
+        },
+        {
             "handle": "filesystem"
         },
         {
