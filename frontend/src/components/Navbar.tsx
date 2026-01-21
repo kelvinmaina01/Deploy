@@ -44,7 +44,7 @@ const Navbar: React.FC = () => {
                                 <div className="user-avatar">
                                     <img src={user?.avatar || '/avatar-placeholder.png'} alt={user?.name} />
                                 </div>
-                                <span className="user-name">{user?.name.split(' ')[0]}</span>
+                                <span className="user-name">{user?.name ? user.name.split(' ')[0] : ''}</span>
                                 <ChevronDown size={14} className={`chevron ${showUserMenu ? 'open' : ''}`} />
                             </button>
 
